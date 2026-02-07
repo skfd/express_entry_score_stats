@@ -1,0 +1,17 @@
+{
+  "name": "immigration_graph",
+  "version": "1.0.0",
+  "description": "Express Entry CRS score visualization",
+  "scripts": {
+    "download": "tsx src/download.ts",
+    "generate": "tsx src/generate.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "puppeteer": "^24.37.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
