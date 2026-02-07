@@ -6,7 +6,7 @@ import type { DrawData, DrawRound } from "./types.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "data", "rounds.json");
 const OUTPUT_DIR = join(__dirname, "..", "dist");
-const OUTPUT_FILE = join(OUTPUT_DIR, "chart.html");
+const OUTPUT_FILE = join(OUTPUT_DIR, "index.html");
 
 /** Normalize round types into broader categories for charting */
 function categorize(roundType: string): string {
