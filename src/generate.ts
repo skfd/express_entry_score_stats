@@ -465,24 +465,26 @@ function main() {
       return resolveTheme(currentTheme) === 'light' ? lightColors : darkColors;
     }
 
+    let chartRef = null;
+
     function applyTheme() {
       const effective = resolveTheme(currentTheme);
       document.documentElement.classList.toggle('light', effective === 'light');
 
       // Update chart colors
-      if (typeof chart !== 'undefined') {
+      if (chartRef) {
         const c = getThemeColors();
-        chart.options.scales.x.grid.color = c.gridX;
-        chart.options.scales.x.ticks.color = c.tick;
-        chart.options.scales.x.title.color = c.axisTitle;
-        chart.options.scales.y.grid.color = c.gridY;
-        chart.options.scales.y.ticks.color = c.tick;
-        chart.options.scales.y.title.color = c.axisTitle;
-        chart.options.plugins.tooltip.backgroundColor = c.tooltipBg;
-        chart.options.plugins.tooltip.titleColor = c.tooltipTitle;
-        chart.options.plugins.tooltip.bodyColor = c.tooltipBody;
-        chart.options.plugins.tooltip.borderColor = c.tooltipBorder;
-        chart.update('none');
+        chartRef.options.scales.x.grid.color = c.gridX;
+        chartRef.options.scales.x.ticks.color = c.tick;
+        chartRef.options.scales.x.title.color = c.axisTitle;
+        chartRef.options.scales.y.grid.color = c.gridY;
+        chartRef.options.scales.y.ticks.color = c.tick;
+        chartRef.options.scales.y.title.color = c.axisTitle;
+        chartRef.options.plugins.tooltip.backgroundColor = c.tooltipBg;
+        chartRef.options.plugins.tooltip.titleColor = c.tooltipTitle;
+        chartRef.options.plugins.tooltip.bodyColor = c.tooltipBody;
+        chartRef.options.plugins.tooltip.borderColor = c.tooltipBorder;
+        chartRef.update('none');
       }
     }
 
@@ -785,6 +787,7 @@ function main() {
       },
     });
 
+    chartRef = chart;
     chart.canvas.parentNode.style.height = '550px';
     chart.resize();
 
