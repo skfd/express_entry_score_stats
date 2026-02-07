@@ -136,30 +136,69 @@ function main() {
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
   <style>
+    :root {
+      --bg: #0f172a;
+      --bg-card: #1e293b;
+      --bg-hover: #334155;
+      --border: #334155;
+      --text: #e2e8f0;
+      --text-heading: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-faint: #64748b;
+      --text-input: #f8fafc;
+      --text-placeholder: #475569;
+      --grid-line: #1e293b;
+      --grid-line-y: #334155;
+      --tooltip-bg: #1e293b;
+      --tooltip-title: #f1f5f9;
+      --tooltip-body: #cbd5e1;
+      --tooltip-border: #334155;
+      --link: #60a5fa;
+    }
+    .light {
+      --bg: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-hover: #e2e8f0;
+      --border: #cbd5e1;
+      --text: #1e293b;
+      --text-heading: #0f172a;
+      --text-muted: #64748b;
+      --text-faint: #94a3b8;
+      --text-input: #0f172a;
+      --text-placeholder: #94a3b8;
+      --grid-line: #e2e8f0;
+      --grid-line-y: #cbd5e1;
+      --tooltip-bg: #ffffff;
+      --tooltip-title: #0f172a;
+      --tooltip-body: #334155;
+      --tooltip-border: #e2e8f0;
+      --link: #2563eb;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--bg);
+      color: var(--text);
       padding: 20px;
+      transition: background 0.2s, color 0.2s;
     }
     h1 {
       text-align: center;
       margin-bottom: 4px;
       font-size: 1.5rem;
-      color: #f1f5f9;
+      color: var(--text-heading);
     }
     .subtitle {
       text-align: center;
       margin-bottom: 20px;
       font-size: 0.85rem;
-      color: #94a3b8;
+      color: var(--text-muted);
     }
     .chart-container {
       position: relative;
       max-width: 1400px;
       margin: 0 auto;
-      background: #1e293b;
+      background: var(--bg-card);
       border-radius: 12px;
       padding: 20px;
     }
@@ -175,7 +214,7 @@ function main() {
     .toolbar-group {
       display: flex;
       gap: 4px;
-      background: #1e293b;
+      background: var(--bg-card);
       border-radius: 8px;
       padding: 4px;
     }
@@ -184,13 +223,13 @@ function main() {
       border: none;
       border-radius: 6px;
       background: transparent;
-      color: #94a3b8;
+      color: var(--text-muted);
       cursor: pointer;
       font-size: 0.8rem;
       font-weight: 500;
       transition: all 0.15s;
     }
-    .toolbar-group button:hover { background: #334155; color: #cbd5e1; }
+    .toolbar-group button:hover { background: var(--bg-hover); color: var(--text); }
     .toolbar-group button.active {
       background: #3b82f6;
       color: white;
@@ -209,15 +248,15 @@ function main() {
     }
     .controls button {
       padding: 6px 14px;
-      border: 1px solid #334155;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: #1e293b;
-      color: #cbd5e1;
+      background: var(--bg-card);
+      color: var(--text);
       cursor: pointer;
       font-size: 0.8rem;
       transition: all 0.15s;
     }
-    .controls button:hover { background: #334155; }
+    .controls button:hover { background: var(--bg-hover); }
     .controls button.active {
       background: #3b82f6;
       border-color: #3b82f6;
@@ -231,13 +270,13 @@ function main() {
       gap: 12px;
     }
     .stat-card {
-      background: #1e293b;
+      background: var(--bg-card);
       border-radius: 8px;
       padding: 14px;
     }
     .stat-card h3 {
       font-size: 0.75rem;
-      color: #94a3b8;
+      color: var(--text-muted);
       text-transform: uppercase;
       margin-bottom: 4px;
     }
@@ -256,17 +295,17 @@ function main() {
     }
     .score-bar label {
       font-size: 0.9rem;
-      color: #94a3b8;
+      color: var(--text-muted);
       font-weight: 500;
       white-space: nowrap;
     }
     .score-bar input {
       width: 100px;
       padding: 8px 12px;
-      border: 2px solid #334155;
+      border: 2px solid var(--border);
       border-radius: 10px;
-      background: #1e293b;
-      color: #f8fafc;
+      background: var(--bg-card);
+      color: var(--text-input);
       font-size: 1.4rem;
       font-weight: 700;
       text-align: center;
@@ -284,7 +323,7 @@ function main() {
       border-color: #f59e0b;
     }
     .score-bar input::placeholder {
-      color: #475569;
+      color: var(--text-placeholder);
       font-weight: 400;
       font-size: 0.9rem;
     }
@@ -292,14 +331,14 @@ function main() {
       display: contents;
     }
     .score-result-card {
-      background: #1e293b;
+      background: var(--bg-card);
       border-radius: 8px;
       padding: 8px 14px;
-      border-left: 3px solid #475569;
+      border-left: 3px solid var(--border);
     }
     .score-result-card .cat-name {
       font-size: 0.65rem;
-      color: #94a3b8;
+      color: var(--text-muted);
       text-transform: uppercase;
       margin-bottom: 1px;
       white-space: nowrap;
@@ -312,15 +351,16 @@ function main() {
       font-weight: 600;
       white-space: nowrap;
     }
-    .score-result-card .result-text.eligible { color: #4ade80; }
-    .score-result-card .result-text.projected { color: #fbbf24; }
-    .score-result-card .result-text.unlikely { color: #f87171; }
+    .score-result-card .result-text.eligible { color: #16a34a; }
+    .score-result-card .result-text.projected { color: #d97706; }
+    .score-result-card .result-text.unlikely { color: #dc2626; }
     .footer {
       text-align: center;
       margin-top: 20px;
       font-size: 0.75rem;
-      color: #64748b;
+      color: var(--text-faint);
     }
+    .footer a { color: var(--link); }
   </style>
 </head>
 <body>
@@ -338,6 +378,11 @@ function main() {
       <button data-proj="moving-avg">Moving Avg</button>
       <button data-proj="poly">Polynomial</button>
     </div>
+    <div class="toolbar-group" id="themeToggle">
+      <button data-theme="auto" class="active">Auto</button>
+      <button data-theme="light">Light</button>
+      <button data-theme="dark">Dark</button>
+    </div>
   </div>
   <div class="score-bar">
     <label for="scoreInput">Your CRS Score</label>
@@ -350,7 +395,7 @@ function main() {
   </div>
   <div class="stats" id="stats"></div>
   <p class="footer">
-    Data source: <a href="${data.source}" style="color:#60a5fa">IRCC Express Entry Rounds</a>
+    Data source: <a href="${data.source}">IRCC Express Entry Rounds</a>
     &middot; Fetched ${new Date(data.fetchedAt).toLocaleDateString()}
     &middot; ${data.rounds.length} rounds total
   </p>
@@ -369,6 +414,7 @@ function main() {
         proj: p.get('proj') || 'off',
         hide: p.get('hide') ? p.get('hide').split(',').filter(Boolean) : [],
         score: p.get('score') || '',
+        theme: p.get('theme') || 'auto',
       };
     }
 
@@ -382,6 +428,7 @@ function main() {
         p.set('hide', indices.join(','));
       }
       if (userScore > 0) p.set('score', String(userScore));
+      if (currentTheme !== 'auto') p.set('theme', currentTheme);
       const qs = p.toString();
       const url = window.location.pathname + (qs ? '?' + qs : '');
       history.replaceState(null, '', url);
@@ -391,6 +438,61 @@ function main() {
     let projectionMode = initState.proj;
     let timeRange = initState.range;
     let userScore = initState.score ? parseInt(initState.score, 10) : 0;
+    let currentTheme = initState.theme;
+
+    // ========== Theme management ==========
+
+    const darkColors = {
+      gridX: '#1e293b', gridY: '#334155',
+      tick: '#94a3b8', axisTitle: '#94a3b8',
+      tooltipBg: '#1e293b', tooltipTitle: '#f1f5f9',
+      tooltipBody: '#cbd5e1', tooltipBorder: '#334155',
+    };
+    const lightColors = {
+      gridX: '#e2e8f0', gridY: '#cbd5e1',
+      tick: '#64748b', axisTitle: '#64748b',
+      tooltipBg: '#ffffff', tooltipTitle: '#0f172a',
+      tooltipBody: '#334155', tooltipBorder: '#e2e8f0',
+    };
+
+    function resolveTheme(pref) {
+      if (pref === 'light') return 'light';
+      if (pref === 'dark') return 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    function getThemeColors() {
+      return resolveTheme(currentTheme) === 'light' ? lightColors : darkColors;
+    }
+
+    function applyTheme() {
+      const effective = resolveTheme(currentTheme);
+      document.documentElement.classList.toggle('light', effective === 'light');
+
+      // Update chart colors
+      if (typeof chart !== 'undefined') {
+        const c = getThemeColors();
+        chart.options.scales.x.grid.color = c.gridX;
+        chart.options.scales.x.ticks.color = c.tick;
+        chart.options.scales.x.title.color = c.axisTitle;
+        chart.options.scales.y.grid.color = c.gridY;
+        chart.options.scales.y.ticks.color = c.tick;
+        chart.options.scales.y.title.color = c.axisTitle;
+        chart.options.plugins.tooltip.backgroundColor = c.tooltipBg;
+        chart.options.plugins.tooltip.titleColor = c.tooltipTitle;
+        chart.options.plugins.tooltip.bodyColor = c.tooltipBody;
+        chart.options.plugins.tooltip.borderColor = c.tooltipBorder;
+        chart.update('none');
+      }
+    }
+
+    // Apply theme immediately (before chart creation, for CSS)
+    applyTheme();
+
+    // Listen for system theme changes when in auto mode
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (currentTheme === 'auto') applyTheme();
+    });
 
     // ========== Projection math ==========
 
@@ -658,10 +760,10 @@ function main() {
                 ];
               },
             },
-            backgroundColor: '#1e293b',
-            titleColor: '#f1f5f9',
-            bodyColor: '#cbd5e1',
-            borderColor: '#334155',
+            backgroundColor: getThemeColors().tooltipBg,
+            titleColor: getThemeColors().tooltipTitle,
+            bodyColor: getThemeColors().tooltipBody,
+            borderColor: getThemeColors().tooltipBorder,
             borderWidth: 1,
             padding: 12,
           },
@@ -670,14 +772,14 @@ function main() {
           x: {
             type: 'time',
             time: { unit: 'month', displayFormats: { month: 'MMM yyyy' } },
-            grid: { color: '#1e293b' },
-            ticks: { color: '#94a3b8', maxRotation: 45 },
-            title: { display: true, text: 'Date', color: '#94a3b8' },
+            grid: { color: getThemeColors().gridX },
+            ticks: { color: getThemeColors().tick, maxRotation: 45 },
+            title: { display: true, text: 'Date', color: getThemeColors().axisTitle },
           },
           y: {
-            grid: { color: '#334155' },
-            ticks: { color: '#94a3b8' },
-            title: { display: true, text: 'CRS Score (minimum to be invited)', color: '#94a3b8' },
+            grid: { color: getThemeColors().gridY },
+            ticks: { color: getThemeColors().tick },
+            title: { display: true, text: 'CRS Score (minimum to be invited)', color: getThemeColors().axisTitle },
           },
         },
       },
@@ -765,6 +867,21 @@ function main() {
         btn.classList.add('active');
         if (projectionMode !== 'off') btn.classList.add('projection-on');
         rebuildChart();
+        writeURL();
+      });
+    });
+
+    // Set initial active state for theme toggle from URL
+    document.querySelectorAll('#themeToggle button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === currentTheme);
+    });
+
+    document.querySelectorAll('#themeToggle button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentTheme = btn.dataset.theme;
+        document.querySelectorAll('#themeToggle button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyTheme();
         writeURL();
       });
     });
