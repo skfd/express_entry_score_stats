@@ -25,7 +25,10 @@ function parseNumber(str: string): number {
 
 async function main() {
   console.log("Launching browser...");
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
   const page = await browser.newPage();
 
   console.log("Navigating to Express Entry rounds page...");
