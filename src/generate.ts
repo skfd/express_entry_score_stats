@@ -250,9 +250,8 @@ function main() {
       max-width: 1400px;
       margin: 0 auto 12px;
       display: flex;
-      gap: 10px;
+      gap: 12px;
       justify-content: center;
-      align-items: center;
       flex-wrap: wrap;
     }
     .toolbar-group {
@@ -328,55 +327,51 @@ function main() {
       font-size: 1.3rem;
       font-weight: 700;
     }
-    .score-group {
+    .score-bar {
+      max-width: 1400px;
+      margin: 0 auto 16px;
       display: flex;
       align-items: center;
-      gap: 6px;
-      background: var(--bg-card);
-      border-radius: 8px;
-      padding: 4px 4px 4px 12px;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
     }
-    .score-group label {
-      font-size: 0.8rem;
+    .score-bar label {
+      font-size: 0.9rem;
       color: var(--text-muted);
       font-weight: 500;
       white-space: nowrap;
     }
-    .score-group input {
-      width: 72px;
-      padding: 5px 4px;
+    .score-bar input {
+      width: 100px;
+      padding: 8px 12px;
       border: 2px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
+      border-radius: 10px;
+      background: var(--bg-card);
       color: var(--text-input);
-      font-size: 1.05rem;
+      font-size: 1.4rem;
       font-weight: 700;
       text-align: center;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.08em;
       outline: none;
       transition: border-color 0.2s;
       -moz-appearance: textfield;
     }
-    .score-group input::-webkit-outer-spin-button,
-    .score-group input::-webkit-inner-spin-button {
+    .score-bar input::-webkit-outer-spin-button,
+    .score-bar input::-webkit-inner-spin-button {
       -webkit-appearance: none;
       margin: 0;
     }
-    .score-group input:focus {
+    .score-bar input:focus {
       border-color: #f59e0b;
     }
-    .score-group input::placeholder {
+    .score-bar input::placeholder {
       color: var(--text-placeholder);
       font-weight: 400;
-      font-size: 0.8rem;
+      font-size: 0.9rem;
     }
-    .score-results-row {
-      max-width: 1400px;
-      margin: 0 auto 12px;
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      flex-wrap: wrap;
+    .score-cards {
+      display: contents;
     }
     .score-result-card {
       background: var(--bg-card);
@@ -461,13 +456,13 @@ function main() {
       <button data-theme="light">Light</button>
       <button data-theme="dark">Dark</button>
     </div>
-    <div class="score-group">
-      <label for="scoreInput">CRS</label>
-      <input type="number" id="scoreInput" min="0" max="1200" placeholder="480" />
-    </div>
-    <div id="poolPosition" class="pool-position-inline" style="display:none;"></div>
   </div>
-  <div class="score-results-row" id="scoreResults"></div>
+  <div class="score-bar">
+    <label for="scoreInput">Your CRS Score</label>
+    <input type="number" id="scoreInput" min="0" max="1200" placeholder="480" />
+    <div id="poolPosition" class="pool-position-inline" style="display:none;"></div>
+    <div class="score-cards" id="scoreResults"></div>
+  </div>
   <div class="controls" id="controls"></div>
   <div class="chart-container">
     <canvas id="chart"></canvas>
