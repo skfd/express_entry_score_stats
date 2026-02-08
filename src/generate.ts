@@ -126,6 +126,49 @@ function main() {
 
   const chartData = JSON.stringify(datasets);
 
+  // Build distribution snapshots over time (deduplicated by asOfDate)
+  const distRounds = data.rounds
+    .filter((r) => r.distribution && r.distribution.total > 0)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const seenDates = new Set<string>();
+  const distSnapshots: Array<{
+    date: string;
+    ranges: Record<string, number>;
+    total: number;
+  }> = [];
+
+  for (const r of distRounds) {
+    const d = r.distribution!;
+    const key = d.asOfDate || r.date;
+    if (seenDates.has(key)) continue;
+    seenDates.add(key);
+    distSnapshots.push({
+      date: r.date,
+      ranges: {
+        "601-1200": d.range601_1200,
+        "501-600": d.range501_600,
+        "491-500": d.range491_500,
+        "481-490": d.range481_490,
+        "471-480": d.range471_480,
+        "461-470": d.range461_470,
+        "451-460": d.range451_460,
+        "441-450": d.range441_450,
+        "431-440": d.range431_440,
+        "421-430": d.range421_430,
+        "411-420": d.range411_420,
+        "401-410": d.range401_410,
+        "351-400": d.range351_400,
+        "301-350": d.range301_350,
+        "0-300": d.range0_300,
+      },
+      total: d.total,
+    });
+  }
+
+  const distributionData = JSON.stringify(distSnapshots);
+  console.log(`\nDistribution snapshots: ${distSnapshots.length}`);
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -207,8 +250,9 @@ function main() {
       max-width: 1400px;
       margin: 0 auto 12px;
       display: flex;
-      gap: 12px;
+      gap: 10px;
       justify-content: center;
+      align-items: center;
       flex-wrap: wrap;
     }
     .toolbar-group {
@@ -284,51 +328,55 @@ function main() {
       font-size: 1.3rem;
       font-weight: 700;
     }
-    .score-bar {
-      max-width: 1400px;
-      margin: 0 auto 16px;
+    .score-group {
       display: flex;
       align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
+      gap: 6px;
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 4px 4px 4px 12px;
     }
-    .score-bar label {
-      font-size: 0.9rem;
+    .score-group label {
+      font-size: 0.8rem;
       color: var(--text-muted);
       font-weight: 500;
       white-space: nowrap;
     }
-    .score-bar input {
-      width: 100px;
-      padding: 8px 12px;
+    .score-group input {
+      width: 72px;
+      padding: 5px 4px;
       border: 2px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg-card);
+      border-radius: 6px;
+      background: var(--bg);
       color: var(--text-input);
-      font-size: 1.4rem;
+      font-size: 1.05rem;
       font-weight: 700;
       text-align: center;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.05em;
       outline: none;
       transition: border-color 0.2s;
       -moz-appearance: textfield;
     }
-    .score-bar input::-webkit-outer-spin-button,
-    .score-bar input::-webkit-inner-spin-button {
+    .score-group input::-webkit-outer-spin-button,
+    .score-group input::-webkit-inner-spin-button {
       -webkit-appearance: none;
       margin: 0;
     }
-    .score-bar input:focus {
+    .score-group input:focus {
       border-color: #f59e0b;
     }
-    .score-bar input::placeholder {
+    .score-group input::placeholder {
       color: var(--text-placeholder);
       font-weight: 400;
-      font-size: 0.9rem;
+      font-size: 0.8rem;
     }
-    .score-cards {
-      display: contents;
+    .score-results-row {
+      max-width: 1400px;
+      margin: 0 auto 12px;
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
     }
     .score-result-card {
       background: var(--bg-card);
@@ -354,6 +402,36 @@ function main() {
     .score-result-card .result-text.eligible { color: #16a34a; }
     .score-result-card .result-text.projected { color: #d97706; }
     .score-result-card .result-text.unlikely { color: #dc2626; }
+    .section-heading {
+      text-align: center;
+      margin-top: 32px;
+      margin-bottom: 4px;
+      font-size: 1.3rem;
+      color: var(--text-heading);
+    }
+    .pool-position-inline {
+      display: contents;
+    }
+    .pool-chip {
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 6px 12px;
+      border-left: 3px solid #f59e0b;
+      white-space: nowrap;
+    }
+    .pool-chip .chip-label {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 1px;
+    }
+    .pool-chip .chip-val {
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .pool-chip .chip-val.good { color: #16a34a; }
+    .pool-chip .chip-val.warn { color: #d97706; }
+    .pool-chip .chip-val.bad { color: #dc2626; }
     .footer {
       text-align: center;
       margin-top: 20px;
@@ -383,17 +461,31 @@ function main() {
       <button data-theme="light">Light</button>
       <button data-theme="dark">Dark</button>
     </div>
+    <div class="score-group">
+      <label for="scoreInput">CRS</label>
+      <input type="number" id="scoreInput" min="0" max="1200" placeholder="480" />
+    </div>
+    <div id="poolPosition" class="pool-position-inline" style="display:none;"></div>
   </div>
-  <div class="score-bar">
-    <label for="scoreInput">Your CRS Score</label>
-    <input type="number" id="scoreInput" min="0" max="1200" placeholder="480" />
-    <div class="score-cards" id="scoreResults"></div>
-  </div>
+  <div class="score-results-row" id="scoreResults"></div>
   <div class="controls" id="controls"></div>
   <div class="chart-container">
     <canvas id="chart"></canvas>
   </div>
   <div class="stats" id="stats"></div>
+
+  <h2 class="section-heading">CRS Score Pool Distribution</h2>
+  <p class="subtitle">Number of candidates in the Express Entry pool by score range over time</p>
+  <div class="toolbar">
+    <div class="toolbar-group" id="distView">
+      <button class="active" data-view="current">Current Snapshot</button>
+      <button data-view="history">History</button>
+    </div>
+  </div>
+  <div class="chart-container" id="distChartContainer">
+    <canvas id="distChart"></canvas>
+  </div>
+
   <p class="footer">
     Data source: <a href="${data.source}">IRCC Express Entry Rounds</a>
     &middot; Fetched ${new Date(data.fetchedAt).toLocaleDateString()}
@@ -402,8 +494,14 @@ function main() {
 
   <script>
     const originalDatasets = ${chartData};
+    const distributionSnapshots = ${distributionData};
     const PROJECTION_MONTHS = 6;
     const MOVING_AVG_WINDOW = 6;
+
+    // Stubs — replaced once distribution chart is initialized
+    var onScoreChanged = function(score) {};
+    var onTimeRangeChanged = function() {};
+    var onThemeChanged = function() {};
 
     // ========== URL state persistence ==========
 
@@ -486,6 +584,7 @@ function main() {
         chartRef.options.plugins.tooltip.borderColor = c.tooltipBorder;
         chartRef.update('none');
       }
+      onThemeChanged();
     }
 
     // Apply theme immediately (before chart creation, for CSS)
@@ -856,6 +955,7 @@ function main() {
         btn.classList.add('active');
         rebuildChart();
         updateStats();
+        onTimeRangeChanged();
         writeURL();
       });
     });
@@ -965,6 +1065,9 @@ function main() {
 
       // Build eligibility results
       buildScoreResults(score);
+
+      // Update pool position and distribution chart
+      onScoreChanged(score);
     }
 
     function buildScoreResults(score) {
@@ -1018,7 +1121,9 @@ function main() {
           result.textContent = 'Eligible now (' + count + ' past round' + (count !== 1 ? 's' : '') + ')';
         } else if (projectedDate) {
           result.classList.add('projected');
-          result.textContent = 'Projected: ' + projectedDate;
+          const isPoolAware = projectedDate.endsWith('*');
+          result.textContent = 'Projected: ' + projectedDate.replace(' *', '');
+          if (isPoolAware) result.title = 'Pool-aware projection (accounts for candidate density at each score range)';
         } else if (lastEligible) {
           result.classList.add('projected');
           const d = new Date(lastEligible.x);
@@ -1033,9 +1138,74 @@ function main() {
       });
     }
 
+    // ========== Pool-aware projection helpers ==========
+
+    // Given a CRS cutoff score, count candidates at or above it using a distribution snapshot
+    function countAboveScore(dist, cutoffScore) {
+      // Score range boundaries (lower bound of each range, high to low)
+      const ranges = [
+        { key: '601-1200', lo: 601 },
+        { key: '501-600', lo: 501 },
+        { key: '491-500', lo: 491 },
+        { key: '481-490', lo: 481 },
+        { key: '471-480', lo: 471 },
+        { key: '461-470', lo: 461 },
+        { key: '451-460', lo: 451 },
+        { key: '441-450', lo: 441 },
+        { key: '431-440', lo: 431 },
+        { key: '421-430', lo: 421 },
+        { key: '411-420', lo: 411 },
+        { key: '401-410', lo: 401 },
+        { key: '351-400', lo: 351 },
+        { key: '301-350', lo: 301 },
+        { key: '0-300', lo: 0 },
+      ];
+      let total = 0;
+      for (const r of ranges) {
+        const count = dist.ranges[r.key] || 0;
+        if (cutoffScore <= r.lo) {
+          // Entire range is above the cutoff
+          total += count;
+        } else {
+          // Cutoff falls within this range — estimate proportionally
+          // Range spans r.lo to r.hi (derive hi from next range's lo - 1, or 1200)
+          const hi = r.key === '601-1200' ? 1200 : parseInt(r.key.split('-')[1]);
+          const span = hi - r.lo + 1;
+          if (cutoffScore <= hi) {
+            const above = hi - cutoffScore + 1;
+            total += Math.round(count * (above / span));
+          }
+          // If cutoff > hi, none from this range count
+          break; // Lower ranges are all below cutoff
+        }
+      }
+      return total;
+    }
+
+    // Find the distribution snapshot closest to a given date
+    function findClosestDist(dateMs) {
+      if (!distributionSnapshots.length) return null;
+      let best = null;
+      let bestDiff = Infinity;
+      for (const snap of distributionSnapshots) {
+        const diff = Math.abs(new Date(snap.date).getTime() - dateMs);
+        if (diff < bestDiff) { bestDiff = diff; best = snap; }
+      }
+      // Only use if within 30 days
+      if (bestDiff > 30 * 24 * 60 * 60 * 1000) return null;
+      return best;
+    }
+
     function getProjectedCrossing(sorted, score, label) {
       const pts = sorted.map(d => ({ x: new Date(d.x).getTime(), y: d.y }));
 
+      // Try pool-aware projection first
+      if (distributionSnapshots.length >= 3) {
+        const poolResult = getPoolAwareProjection(sorted, score, label);
+        if (poolResult) return poolResult;
+      }
+
+      // Fall back to trend-based projection
       let regFn = linearRegression;
       if (projectionMode === 'poly') regFn = polyRegression;
 
@@ -1068,6 +1238,408 @@ function main() {
         }
       }
       return null;
+    }
+
+    // Pool-aware projection: uses competition ratio (candidates above cutoff / invitations)
+    // instead of raw CRS score trend. This accounts for the non-linear density of
+    // candidates at different score ranges — cutoffs stall at dense bands.
+    function getPoolAwareProjection(sorted, userScore, label) {
+      // Build competition ratio time series for this category
+      // For each historical round, compute: candidatesAboveCutoff / invitationsIssued
+      const ratioSeries = [];
+      for (const d of sorted) {
+        if (!d.invitations || d.invitations <= 0) continue;
+        const dateMs = new Date(d.x).getTime();
+        const dist = findClosestDist(dateMs);
+        if (!dist) continue;
+        const above = countAboveScore(dist, d.y);
+        ratioSeries.push({
+          x: dateMs,
+          ratio: above / d.invitations,
+          cutoff: d.y,
+          invitations: d.invitations,
+        });
+      }
+
+      if (ratioSeries.length < 3) return null;
+
+      // Current: how competitive is it for the user's score?
+      const latestDist = getLatestDistribution();
+      if (!latestDist) return null;
+      const userAbove = countAboveScore(latestDist, userScore);
+
+      // Get typical invitation size for this category (median of recent rounds)
+      const recentInvitations = sorted.slice(-10)
+        .map(d => d.invitations)
+        .filter(n => n > 0)
+        .sort((a, b) => a - b);
+      if (!recentInvitations.length) return null;
+      const medianInvitations = recentInvitations[Math.floor(recentInvitations.length / 2)];
+
+      const userRatio = userAbove / medianInvitations;
+
+      // If ratio is already <= 1, user would likely be invited now
+      if (userRatio <= 1.0) return null;
+
+      // Project how the competition ratio for the user's score has been changing
+      // Use the pool snapshots to compute the user's ratio at each snapshot
+      const userRatioSeries = [];
+      for (const snap of distributionSnapshots) {
+        const dateMs = new Date(snap.date).getTime();
+        const above = countAboveScore(snap, userScore);
+        userRatioSeries.push({ x: dateMs, y: above / medianInvitations });
+      }
+
+      if (userRatioSeries.length < 2) return null;
+
+      // Fit a regression to the user's ratio trend
+      let regFn = linearRegression;
+      if (projectionMode === 'poly') regFn = polyRegression;
+      if (projectionMode === 'moving-avg') {
+        if (userRatioSeries.length >= MOVING_AVG_WINDOW) {
+          const smoothed = [];
+          for (let i = MOVING_AVG_WINDOW - 1; i < userRatioSeries.length; i++) {
+            let sum = 0;
+            for (let j = i - MOVING_AVG_WINDOW + 1; j <= i; j++) sum += userRatioSeries[j].y;
+            smoothed.push({ x: userRatioSeries[i].x, y: sum / MOVING_AVG_WINDOW });
+          }
+          const tail = smoothed.slice(-3);
+          regFn = () => linearRegression(tail);
+        }
+      }
+
+      const reg = regFn(userRatioSeries);
+      if (!reg) return null;
+
+      // Search forward for when the ratio drops to <= 1.0 (favorable)
+      const lastT = userRatioSeries[userRatioSeries.length - 1].x;
+      const maxT = lastT + 3 * 365.25 * 24 * 60 * 60 * 1000;
+      const step = 7 * 24 * 60 * 60 * 1000;
+
+      for (let t = lastT; t <= maxT; t += step) {
+        const projected = reg.eval(t);
+        if (projected <= 1.0) {
+          const d = new Date(t);
+          return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short' }) + ' *';
+        }
+      }
+      return null;
+    }
+
+    // ========== Distribution Chart ==========
+
+    const distRangeLabels = [
+      '601-1200', '501-600', '491-500', '481-490', '471-480',
+      '461-470', '451-460', '441-450', '431-440', '421-430',
+      '411-420', '401-410', '351-400', '301-350', '0-300'
+    ];
+
+    const distColors = [
+      '#7c3aed', '#6366f1', '#3b82f6', '#0ea5e9', '#06b6d4',
+      '#14b8a6', '#10b981', '#22c55e', '#84cc16', '#eab308',
+      '#f59e0b', '#f97316', '#ef4444', '#dc2626', '#991b1b'
+    ];
+
+    let distView = 'current';
+    let distChartRef = null;
+
+    function getLatestDistribution() {
+      if (!distributionSnapshots.length) return null;
+      return distributionSnapshots[distributionSnapshots.length - 1];
+    }
+
+    function buildDistChart() {
+      const dCtx = document.getElementById('distChart').getContext('2d');
+
+      if (distChartRef) {
+        distChartRef.destroy();
+        distChartRef = null;
+      }
+
+      const container = document.getElementById('distChartContainer');
+      container.style.height = distView === 'current' ? '400px' : '450px';
+
+      if (distView === 'current') {
+        // Current snapshot — horizontal bar chart
+        const latest = getLatestDistribution();
+        if (!latest) return;
+
+        const values = distRangeLabels.map(r => latest.ranges[r] || 0);
+
+        distChartRef = new Chart(dCtx, {
+          type: 'bar',
+          data: {
+            labels: distRangeLabels,
+            datasets: [{
+              label: 'Candidates',
+              data: values,
+              backgroundColor: distColors.map(c => c + 'cc'),
+              borderColor: distColors,
+              borderWidth: 1,
+            }],
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (item) => {
+                    const v = item.raw;
+                    const pct = latest.total > 0 ? ((v / latest.total) * 100).toFixed(1) : '0';
+                    return v.toLocaleString() + ' candidates (' + pct + '%)';
+                  },
+                },
+                backgroundColor: getThemeColors().tooltipBg,
+                titleColor: getThemeColors().tooltipTitle,
+                bodyColor: getThemeColors().tooltipBody,
+                borderColor: getThemeColors().tooltipBorder,
+                borderWidth: 1,
+              },
+              annotation: userScore > 0 ? {
+                annotations: {
+                  scoreLine: {
+                    type: 'line',
+                    xMin: 0, xMax: Math.max(...values) * 1.1,
+                    yMin: getScoreRangeIndex(userScore), yMax: getScoreRangeIndex(userScore),
+                    borderColor: '#f59e0b',
+                    borderWidth: 2,
+                    borderDash: [6, 3],
+                    label: {
+                      display: true,
+                      content: 'Your score: ' + userScore,
+                      position: 'end',
+                      backgroundColor: '#f59e0bcc',
+                      color: '#0f172a',
+                      font: { weight: 'bold', size: 11 },
+                      padding: { top: 2, bottom: 2, left: 6, right: 6 },
+                      borderRadius: 3,
+                    },
+                  },
+                },
+              } : {},
+            },
+            scales: {
+              x: {
+                grid: { color: getThemeColors().gridX },
+                ticks: {
+                  color: getThemeColors().tick,
+                  callback: function(v) {
+                    if (v >= 1000) return (v / 1000).toFixed(0) + 'k';
+                    return v;
+                  },
+                },
+                title: { display: true, text: 'Number of Candidates', color: getThemeColors().axisTitle },
+              },
+              y: {
+                grid: { color: getThemeColors().gridY },
+                ticks: { color: getThemeColors().tick, font: { size: 11 } },
+                title: { display: true, text: 'CRS Score Range', color: getThemeColors().axisTitle },
+              },
+            },
+          },
+        });
+      } else {
+        // History view — stacked area chart of pool over time
+        const cutoff = timeRange === '3y'
+          ? new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).getTime()
+          : 0;
+        const filtered = cutoff > 0
+          ? distributionSnapshots.filter(s => new Date(s.date).getTime() >= cutoff)
+          : distributionSnapshots;
+
+        if (!filtered.length) return;
+
+        // Build datasets — one per score range, stacked
+        const datasets = distRangeLabels.map((range, idx) => ({
+          label: range,
+          data: filtered.map(s => ({ x: s.date, y: s.ranges[range] || 0 })),
+          backgroundColor: distColors[idx] + '99',
+          borderColor: distColors[idx],
+          borderWidth: 1,
+          fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 3,
+          tension: 0.3,
+        }));
+
+        distChartRef = new Chart(dCtx, {
+          type: 'line',
+          data: { datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  color: getThemeColors().tick,
+                  font: { size: 10 },
+                  boxWidth: 12,
+                  padding: 8,
+                },
+              },
+              tooltip: {
+                callbacks: {
+                  title: (items) => {
+                    const d = new Date(items[0].raw.x);
+                    return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+                  },
+                  label: (item) => {
+                    return item.dataset.label + ': ' + item.raw.y.toLocaleString();
+                  },
+                  footer: (items) => {
+                    const total = items.reduce((s, it) => s + it.raw.y, 0);
+                    return 'Total pool: ' + total.toLocaleString();
+                  },
+                },
+                backgroundColor: getThemeColors().tooltipBg,
+                titleColor: getThemeColors().tooltipTitle,
+                bodyColor: getThemeColors().tooltipBody,
+                footerColor: getThemeColors().tooltipTitle,
+                borderColor: getThemeColors().tooltipBorder,
+                borderWidth: 1,
+              },
+            },
+            scales: {
+              x: {
+                type: 'time',
+                time: { unit: 'month', displayFormats: { month: 'MMM yyyy' } },
+                grid: { color: getThemeColors().gridX },
+                ticks: { color: getThemeColors().tick, maxRotation: 45 },
+                stacked: true,
+              },
+              y: {
+                stacked: true,
+                grid: { color: getThemeColors().gridY },
+                ticks: {
+                  color: getThemeColors().tick,
+                  callback: function(v) {
+                    if (v >= 1000) return (v / 1000).toFixed(0) + 'k';
+                    return v;
+                  },
+                },
+                title: { display: true, text: 'Candidates in Pool', color: getThemeColors().axisTitle },
+              },
+            },
+          },
+        });
+      }
+    }
+
+    function getScoreRangeIndex(score) {
+      // Returns the y-axis index for the bar chart where the user's score falls
+      if (score >= 601) return 0;
+      if (score >= 501) return 1;
+      if (score >= 491) return 2;
+      if (score >= 481) return 3;
+      if (score >= 471) return 4;
+      if (score >= 461) return 5;
+      if (score >= 451) return 6;
+      if (score >= 441) return 7;
+      if (score >= 431) return 8;
+      if (score >= 421) return 9;
+      if (score >= 411) return 10;
+      if (score >= 401) return 11;
+      if (score >= 351) return 12;
+      if (score >= 301) return 13;
+      return 14;
+    }
+
+    function getScoreRangeLabel(score) {
+      const idx = getScoreRangeIndex(score);
+      return distRangeLabels[idx];
+    }
+
+    // Pool position info when user enters score
+    function updatePoolPosition(score) {
+      const el = document.getElementById('poolPosition');
+      if (!score || score <= 0 || !distributionSnapshots.length) {
+        el.style.display = 'none';
+        return;
+      }
+
+      const latest = getLatestDistribution();
+      if (!latest) { el.style.display = 'none'; return; }
+
+      // Count people at or above user's score
+      const rangeOrder = distRangeLabels;
+      const userIdx = getScoreRangeIndex(score);
+      let above = 0;
+      for (let i = 0; i < userIdx; i++) {
+        above += latest.ranges[rangeOrder[i]] || 0;
+      }
+      // For the user's own range, estimate roughly half are above
+      const inRange = latest.ranges[rangeOrder[userIdx]] || 0;
+      above += Math.round(inRange * 0.5);
+
+      const total = latest.total;
+      const percentile = total > 0 ? ((1 - above / total) * 100).toFixed(1) : '0';
+      const topPct = total > 0 ? ((above / total) * 100).toFixed(1) : '0';
+
+      let colorClass = 'good';
+      if (parseFloat(topPct) > 50) colorClass = 'bad';
+      else if (parseFloat(topPct) > 25) colorClass = 'warn';
+
+      // Competition ratio: candidates above you vs typical invitation size
+      // Use median of last 10 General rounds as reference invitation size
+      const allRoundsFlat = originalDatasets.flatMap(ds => ds.data)
+        .filter(d => d.invitations > 0)
+        .sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
+      const recentInv = allRoundsFlat.slice(-10).map(d => d.invitations).sort((a, b) => a - b);
+      const medInv = recentInv.length > 0 ? recentInv[Math.floor(recentInv.length / 2)] : 0;
+
+      // Use pool-aware count (with proportional estimation within ranges)
+      const abovePool = countAboveScore(latest, score);
+      const compRatio = medInv > 0 ? (abovePool / medInv) : 0;
+      const compStr = compRatio.toFixed(1) + ':1';
+      let compClass = 'good';
+      if (compRatio > 5) compClass = 'bad';
+      else if (compRatio > 2) compClass = 'warn';
+
+      el.style.display = 'contents';
+      el.innerHTML =
+        '<div class="pool-chip" title="Candidates with CRS scores above yours in the pool"><div class="chip-label">Above you</div><div class="chip-val ' + colorClass + '">' + abovePool.toLocaleString() + '</div></div>' +
+        '<div class="pool-chip" title="Candidates above your score / typical invitations per round (' + medInv.toLocaleString() + '). Below 1:1 = likely invited."><div class="chip-label">Competition</div><div class="chip-val ' + compClass + '">' + compStr + '</div></div>' +
+        '<div class="pool-chip" title="Your position in the pool of ' + total.toLocaleString() + ' candidates"><div class="chip-label">Percentile</div><div class="chip-val ' + colorClass + '">Top ' + topPct + '%</div></div>';
+    }
+
+    // Wire up dist view toggle
+    document.querySelectorAll('#distView button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        distView = btn.dataset.view;
+        document.querySelectorAll('#distView button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        buildDistChart();
+      });
+    });
+
+    // Build initial dist chart
+    if (distributionSnapshots.length > 0) {
+      buildDistChart();
+      if (userScore > 0) updatePoolPosition(userScore);
+    }
+
+    // Wire up score and time range changes to distribution chart
+    onScoreChanged = function(score) {
+      updatePoolPosition(score);
+      if (distView === 'current') buildDistChart();
+    };
+    onTimeRangeChanged = function() {
+      if (distView === 'history') buildDistChart();
+    };
+    onThemeChanged = function() {
+      buildDistChart();
+    };
+
+    // Apply pool position if score was set from URL
+    if (userScore > 0) {
+      updatePoolPosition(userScore);
+      if (distView === 'current') buildDistChart();
     }
   </script>
 </body>

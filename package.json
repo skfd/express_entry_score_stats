@@ -10,7 +10,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "puppeteer": "^24.37.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
