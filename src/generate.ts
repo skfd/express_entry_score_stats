@@ -483,9 +483,15 @@ function main() {
   </div>
 
   <p class="footer">
+    Contains information licensed under the <a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence &ndash; Canada</a>.
     Data source: <a href="${data.source}">IRCC Express Entry Rounds</a>
     &middot; Fetched ${new Date(data.fetchedAt).toLocaleDateString()}
     &middot; ${data.rounds.length} rounds total
+    <br>
+    Built with <a href="https://www.chartjs.org/">Chart.js</a>,
+    <a href="https://github.com/chartjs/chartjs-adapter-date-fns">chartjs-adapter-date-fns</a>,
+    and <a href="https://github.com/chartjs/chartjs-plugin-annotation">chartjs-plugin-annotation</a>
+    (MIT License)
   </p>
 
   <script>
