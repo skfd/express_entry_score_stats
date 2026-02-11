@@ -1452,12 +1452,14 @@ function main() {
           histColors = distColors.slice(0, cutIdx + 1);
         }
 
-        // Build datasets — one per score range, stacked
-        const datasets = histLabels.map((range, idx) => ({
+        // Build datasets — one per score range, stacked (reversed so higher scores on top)
+        const revLabels = [...histLabels].reverse();
+        const revColors = [...histColors].reverse();
+        const datasets = revLabels.map((range, idx) => ({
           label: range,
           data: filtered.map(s => ({ x: s.date, y: s.ranges[range] || 0 })),
-          backgroundColor: histColors[idx] + '99',
-          borderColor: histColors[idx],
+          backgroundColor: revColors[idx] + '99',
+          borderColor: revColors[idx],
           borderWidth: 1,
           fill: true,
           pointRadius: 0,
