@@ -1366,17 +1366,26 @@ function main() {
         const latest = getLatestDistribution();
         if (!latest) return;
 
-        const values = distRangeLabels.map(r => latest.ranges[r] || 0);
+        // Filter out ranges below user's score when a score is set
+        let filteredLabels = distRangeLabels;
+        let filteredColors = distColors;
+        if (userScore > 0) {
+          const cutIdx = getScoreRangeIndex(userScore);
+          filteredLabels = distRangeLabels.slice(0, cutIdx + 1);
+          filteredColors = distColors.slice(0, cutIdx + 1);
+        }
+
+        const values = filteredLabels.map(r => latest.ranges[r] || 0);
 
         distChartRef = new Chart(dCtx, {
           type: 'bar',
           data: {
-            labels: distRangeLabels,
+            labels: filteredLabels,
             datasets: [{
               label: 'Candidates',
               data: values,
-              backgroundColor: distColors.map(c => c + 'cc'),
-              borderColor: distColors,
+              backgroundColor: filteredColors.map(c => c + 'cc'),
+              borderColor: filteredColors,
               borderWidth: 1,
             }],
           },
@@ -1400,28 +1409,7 @@ function main() {
                 borderColor: getThemeColors().tooltipBorder,
                 borderWidth: 1,
               },
-              annotation: userScore > 0 ? {
-                annotations: {
-                  scoreLine: {
-                    type: 'line',
-                    xMin: 0, xMax: Math.max(...values) * 1.1,
-                    yMin: getScoreRangeIndex(userScore), yMax: getScoreRangeIndex(userScore),
-                    borderColor: '#f59e0b',
-                    borderWidth: 2,
-                    borderDash: [6, 3],
-                    label: {
-                      display: true,
-                      content: 'Your score: ' + userScore,
-                      position: 'end',
-                      backgroundColor: '#f59e0bcc',
-                      color: '#0f172a',
-                      font: { weight: 'bold', size: 11 },
-                      padding: { top: 2, bottom: 2, left: 6, right: 6 },
-                      borderRadius: 3,
-                    },
-                  },
-                },
-              } : {},
+              annotation: {},
             },
             scales: {
               x: {
@@ -1436,6 +1424,7 @@ function main() {
                 title: { display: true, text: 'Number of Candidates', color: getThemeColors().axisTitle },
               },
               y: {
+                reverse: true,
                 grid: { color: getThemeColors().gridY },
                 ticks: { color: getThemeColors().tick, font: { size: 11 } },
                 title: { display: true, text: 'CRS Score Range', color: getThemeColors().axisTitle },
