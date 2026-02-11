@@ -1443,12 +1443,23 @@ function main() {
 
         if (!filtered.length) return;
 
-        // Build datasets — one per score range, stacked
-        const datasets = distRangeLabels.map((range, idx) => ({
+        // Filter out ranges below user's score when a score is set
+        let histLabels = distRangeLabels;
+        let histColors = distColors;
+        if (userScore > 0) {
+          const cutIdx = getScoreRangeIndex(userScore);
+          histLabels = distRangeLabels.slice(0, cutIdx + 1);
+          histColors = distColors.slice(0, cutIdx + 1);
+        }
+
+        // Build datasets — one per score range, stacked (reversed so higher scores on top)
+        const revLabels = [...histLabels].reverse();
+        const revColors = [...histColors].reverse();
+        const datasets = revLabels.map((range, idx) => ({
           label: range,
           data: filtered.map(s => ({ x: s.date, y: s.ranges[range] || 0 })),
-          backgroundColor: distColors[idx] + '99',
-          borderColor: distColors[idx],
+          backgroundColor: revColors[idx] + '99',
+          borderColor: revColors[idx],
           borderWidth: 1,
           fill: true,
           pointRadius: 0,
