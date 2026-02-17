@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
   schedule:
-    # Re-download data and redeploy every Monday at 6am UTC
-    - cron: "0 6 * * 1"
+    # Re-download data and redeploy every day at 6am UTC
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -34,6 +34,28 @@ jobs:
 
       - name: Download latest data
         run: npm run download
+
+      - name: Check for data changes
+        id: check_changes
+        run: |
+          git add src/data/rounds.json
+          git diff --cached --quiet && HAS_CHANGES=false || HAS_CHANGES=true
+          if [ "$HAS_CHANGES" = "true" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "New data detected"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No new data found"
+            git reset src/data/rounds.json
+          fi
+
+      - name: Commit new data
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Express Entry data - $(date +'%Y-%m-%d')"
+          git push
 
       - name: Generate visualization
         run: npm run generate
