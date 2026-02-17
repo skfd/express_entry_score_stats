@@ -39,12 +39,14 @@ jobs:
         id: check_changes
         run: |
           git add src/data/rounds.json
-          if ! git diff --cached --quiet; then
+          git diff --cached --quiet && HAS_CHANGES=false || HAS_CHANGES=true
+          if [ "$HAS_CHANGES" = "true" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "New data detected"
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
             echo "No new data found"
+            git reset src/data/rounds.json
           fi
 
       - name: Commit new data
