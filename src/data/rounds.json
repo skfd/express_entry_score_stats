@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-02-20T06:19:58.386Z",
+  "fetchedAt": "2026-02-21T06:13:17.903Z",
   "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html",
   "rounds": [
     {
@@ -6188,6 +6188,32 @@
       "roundType": "Physicians with Canadian Work Experience, 2026-Version 1",
       "invitationsIssued": 391,
       "crsScore": 169,
+      "distribution": {
+        "range601_1200": 280,
+        "range501_600": 16559,
+        "range491_500": 13504,
+        "range481_490": 13248,
+        "range471_480": 16531,
+        "range461_470": 15426,
+        "range451_460": 14900,
+        "range441_450": 14142,
+        "range431_440": 14239,
+        "range421_430": 12425,
+        "range411_420": 12183,
+        "range401_410": 11316,
+        "range351_400": 53650,
+        "range301_350": 19009,
+        "range0_300": 8283,
+        "total": 235695,
+        "asOfDate": "February 15, 2026"
+      }
+    },
+    {
+      "number": 398,
+      "date": "2026-02-20",
+      "roundType": "Healthcare and Social Services Occupations, 2026-Version 3",
+      "invitationsIssued": 4000,
+      "crsScore": 467,
       "distribution": {
         "range601_1200": 280,
         "range501_600": 16559,
