@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
   schedule:
-    # Re-download data and redeploy every day at 6am UTC
-    - cron: "0 6 * * *"
+    # Re-download data and redeploy every 6 hours (0:00, 6:00, 12:00, 18:00 UTC)
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
