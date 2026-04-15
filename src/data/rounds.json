@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-04-14T06:38:14.567Z",
+  "fetchedAt": "2026-04-15T06:38:51.454Z",
   "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html",
   "rounds": [
     {
@@ -6518,6 +6518,32 @@
         "range0_300": 8298,
         "total": 230186,
         "asOfDate": "March 29, 2026"
+      }
+    },
+    {
+      "number": 410,
+      "date": "2026-04-14",
+      "roundType": "Canadian Experience Class",
+      "invitationsIssued": 2000,
+      "crsScore": 515,
+      "distribution": {
+        "range601_1200": 325,
+        "range501_600": 13610,
+        "range491_500": 13174,
+        "range481_490": 12663,
+        "range471_480": 16246,
+        "range461_470": 15968,
+        "range451_460": 15512,
+        "range441_450": 14606,
+        "range431_440": 14775,
+        "range421_430": 12973,
+        "range411_420": 12753,
+        "range401_410": 11845,
+        "range351_400": 52309,
+        "range301_350": 18543,
+        "range0_300": 8253,
+        "total": 233555,
+        "asOfDate": "April 12, 2026"
       }
     }
   ]
