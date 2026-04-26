@@ -472,12 +472,7 @@ function main() {
 
   <h2 class="section-heading">CRS Score Pool Distribution</h2>
   <p class="subtitle">Number of candidates in the Express Entry pool by score range over time</p>
-  <div class="toolbar">
-    <div class="toolbar-group" id="distView">
-      <button class="active" data-view="current">Current Snapshot</button>
-      <button data-view="history">History</button>
-    </div>
-  </div>
+
   <div class="chart-container" id="distChartContainer">
     <canvas id="distChart"></canvas>
   </div>
@@ -1343,7 +1338,6 @@ function main() {
       '#f59e0b', '#f97316', '#ef4444', '#dc2626', '#991b1b'
     ];
 
-    let distView = 'current';
     let distChartRef = null;
 
     function getLatestDistribution() {
@@ -1360,178 +1354,105 @@ function main() {
       }
 
       const container = document.getElementById('distChartContainer');
-      container.style.height = distView === 'current' ? '400px' : '450px';
+      container.style.height = '450px';
 
-      if (distView === 'current') {
-        // Current snapshot — horizontal bar chart
-        const latest = getLatestDistribution();
-        if (!latest) return;
+      // History view — stacked area chart of pool over time
+      const cutoff = timeRange === '3y'
+        ? new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).getTime()
+        : 0;
+      const filtered = cutoff > 0
+        ? distributionSnapshots.filter(s => new Date(s.date).getTime() >= cutoff)
+        : distributionSnapshots;
 
-        // Filter out ranges below user's score when a score is set
-        let filteredLabels = distRangeLabels;
-        let filteredColors = distColors;
-        if (userScore > 0) {
-          const cutIdx = getScoreRangeIndex(userScore);
-          filteredLabels = distRangeLabels.slice(0, cutIdx + 1);
-          filteredColors = distColors.slice(0, cutIdx + 1);
-        }
+      if (!filtered.length) return;
 
-        const values = filteredLabels.map(r => latest.ranges[r] || 0);
-
-        distChartRef = new Chart(dCtx, {
-          type: 'bar',
-          data: {
-            labels: filteredLabels,
-            datasets: [{
-              label: 'Candidates',
-              data: values,
-              backgroundColor: filteredColors.map(c => c + 'cc'),
-              borderColor: filteredColors,
-              borderWidth: 1,
-            }],
-          },
-          options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: (item) => {
-                    const v = item.raw;
-                    const pct = latest.total > 0 ? ((v / latest.total) * 100).toFixed(1) : '0';
-                    return v.toLocaleString() + ' candidates (' + pct + '%)';
-                  },
-                },
-                backgroundColor: getThemeColors().tooltipBg,
-                titleColor: getThemeColors().tooltipTitle,
-                bodyColor: getThemeColors().tooltipBody,
-                borderColor: getThemeColors().tooltipBorder,
-                borderWidth: 1,
-              },
-              annotation: {},
-            },
-            scales: {
-              x: {
-                grid: { color: getThemeColors().gridX },
-                ticks: {
-                  color: getThemeColors().tick,
-                  callback: function(v) {
-                    if (v >= 1000) return (v / 1000).toFixed(0) + 'k';
-                    return v;
-                  },
-                },
-                title: { display: true, text: 'Number of Candidates', color: getThemeColors().axisTitle },
-              },
-              y: {
-                reverse: true,
-                grid: { color: getThemeColors().gridY },
-                ticks: { color: getThemeColors().tick, font: { size: 11 } },
-                title: { display: true, text: 'CRS Score Range', color: getThemeColors().axisTitle },
-              },
-            },
-          },
-        });
-      } else {
-        // History view — stacked area chart of pool over time
-        const cutoff = timeRange === '3y'
-          ? new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).getTime()
-          : 0;
-        const filtered = cutoff > 0
-          ? distributionSnapshots.filter(s => new Date(s.date).getTime() >= cutoff)
-          : distributionSnapshots;
-
-        if (!filtered.length) return;
-
-        // Filter out ranges below user's score when a score is set
-        let histLabels = distRangeLabels;
-        let histColors = distColors;
-        if (userScore > 0) {
-          const cutIdx = getScoreRangeIndex(userScore);
-          histLabels = distRangeLabels.slice(0, cutIdx + 1);
-          histColors = distColors.slice(0, cutIdx + 1);
-        }
-
-        // Build datasets — one per score range, stacked (reversed so higher scores on top)
-        const revLabels = [...histLabels].reverse();
-        const revColors = [...histColors].reverse();
-        const datasets = revLabels.map((range, idx) => ({
-          label: range,
-          data: filtered.map(s => ({ x: s.date, y: s.ranges[range] || 0 })),
-          backgroundColor: revColors[idx] + '99',
-          borderColor: revColors[idx],
-          borderWidth: 1,
-          fill: true,
-          pointRadius: 0,
-          pointHoverRadius: 3,
-          tension: 0.3,
-        }));
-
-        distChartRef = new Chart(dCtx, {
-          type: 'line',
-          data: { datasets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-              legend: {
-                display: true,
-                position: 'bottom',
-                labels: {
-                  color: getThemeColors().tick,
-                  font: { size: 10 },
-                  boxWidth: 12,
-                  padding: 8,
-                },
-              },
-              tooltip: {
-                callbacks: {
-                  title: (items) => {
-                    const d = new Date(items[0].raw.x);
-                    return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
-                  },
-                  label: (item) => {
-                    return item.dataset.label + ': ' + item.raw.y.toLocaleString();
-                  },
-                  footer: (items) => {
-                    const total = items.reduce((s, it) => s + it.raw.y, 0);
-                    return 'Total pool: ' + total.toLocaleString();
-                  },
-                },
-                backgroundColor: getThemeColors().tooltipBg,
-                titleColor: getThemeColors().tooltipTitle,
-                bodyColor: getThemeColors().tooltipBody,
-                footerColor: getThemeColors().tooltipTitle,
-                borderColor: getThemeColors().tooltipBorder,
-                borderWidth: 1,
-              },
-            },
-            scales: {
-              x: {
-                type: 'time',
-                time: { unit: 'month', displayFormats: { month: 'MMM yyyy' } },
-                grid: { color: getThemeColors().gridX },
-                ticks: { color: getThemeColors().tick, maxRotation: 45 },
-                stacked: true,
-              },
-              y: {
-                stacked: true,
-                grid: { color: getThemeColors().gridY },
-                ticks: {
-                  color: getThemeColors().tick,
-                  callback: function(v) {
-                    if (v >= 1000) return (v / 1000).toFixed(0) + 'k';
-                    return v;
-                  },
-                },
-                title: { display: true, text: 'Candidates in Pool', color: getThemeColors().axisTitle },
-              },
-            },
-          },
-        });
+      // Filter out ranges below user's score when a score is set
+      let histLabels = distRangeLabels;
+      let histColors = distColors;
+      if (userScore > 0) {
+        const cutIdx = getScoreRangeIndex(userScore);
+        histLabels = distRangeLabels.slice(0, cutIdx + 1);
+        histColors = distColors.slice(0, cutIdx + 1);
       }
+
+      // Build datasets — one per score range, stacked (reversed so higher scores on top)
+      const revLabels = [...histLabels].reverse();
+      const revColors = [...histColors].reverse();
+      const datasets = revLabels.map((range, idx) => ({
+        label: range,
+        data: filtered.map(s => ({ x: s.date, y: s.ranges[range] || 0 })),
+        backgroundColor: revColors[idx] + '99',
+        borderColor: revColors[idx],
+        borderWidth: 1,
+        fill: true,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        tension: 0.3,
+      }));
+
+      distChartRef = new Chart(dCtx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                color: getThemeColors().tick,
+                font: { size: 10 },
+                boxWidth: 12,
+                padding: 8,
+              },
+            },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const d = new Date(items[0].raw.x);
+                  return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+                },
+                label: (item) => {
+                  return item.dataset.label + ': ' + item.raw.y.toLocaleString();
+                },
+                footer: (items) => {
+                  const total = items.reduce((s, it) => s + it.raw.y, 0);
+                  return 'Total pool: ' + total.toLocaleString();
+                },
+              },
+              backgroundColor: getThemeColors().tooltipBg,
+              titleColor: getThemeColors().tooltipTitle,
+              bodyColor: getThemeColors().tooltipBody,
+              footerColor: getThemeColors().tooltipTitle,
+              borderColor: getThemeColors().tooltipBorder,
+              borderWidth: 1,
+            },
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'month', displayFormats: { month: 'MMM yyyy' } },
+              grid: { color: getThemeColors().gridX },
+              ticks: { color: getThemeColors().tick, maxRotation: 45 },
+              stacked: true,
+            },
+            y: {
+              stacked: true,
+              grid: { color: getThemeColors().gridY },
+              ticks: {
+                color: getThemeColors().tick,
+                callback: function(v) {
+                  if (v >= 1000) return (v / 1000).toFixed(0) + 'k';
+                  return v;
+                },
+              },
+              title: { display: true, text: 'Candidates in Pool', color: getThemeColors().axisTitle },
+            },
+          },
+        },
+      });
     }
 
     function getScoreRangeIndex(score) {
@@ -1611,15 +1532,17 @@ function main() {
         '<div class="pool-chip" title="Your position in the pool of ' + total.toLocaleString() + ' candidates"><div class="chip-label">Percentile</div><div class="chip-val ' + colorClass + '">Top ' + topPct + '%</div></div>';
     }
 
-    // Wire up dist view toggle
-    document.querySelectorAll('#distView button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        distView = btn.dataset.view;
-        document.querySelectorAll('#distView button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        buildDistChart();
-      });
-    });
+    // Wire up score and time range changes to distribution chart
+    onScoreChanged = function(score) {
+      updatePoolPosition(score);
+      buildDistChart();
+    };
+    onTimeRangeChanged = function() {
+      buildDistChart();
+    };
+    onThemeChanged = function() {
+      buildDistChart();
+    };
 
     // Build initial dist chart
     if (distributionSnapshots.length > 0) {
@@ -1627,22 +1550,9 @@ function main() {
       if (userScore > 0) updatePoolPosition(userScore);
     }
 
-    // Wire up score and time range changes to distribution chart
-    onScoreChanged = function(score) {
-      updatePoolPosition(score);
-      if (distView === 'current') buildDistChart();
-    };
-    onTimeRangeChanged = function() {
-      if (distView === 'history') buildDistChart();
-    };
-    onThemeChanged = function() {
-      buildDistChart();
-    };
-
     // Apply pool position if score was set from URL
     if (userScore > 0) {
       updatePoolPosition(userScore);
-      if (distView === 'current') buildDistChart();
     }
   </script>
 </body>
