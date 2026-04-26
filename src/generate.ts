@@ -492,6 +492,7 @@ function main() {
     <a href="https://github.com/chartjs/chartjs-adapter-date-fns">chartjs-adapter-date-fns</a>,
     and <a href="https://github.com/chartjs/chartjs-plugin-annotation">chartjs-plugin-annotation</a>
     (MIT License)
+    &middot; <a href="https://github.com/skfd/express_entry_score_stats">View on GitHub</a>
   </p>
 
   <script>
