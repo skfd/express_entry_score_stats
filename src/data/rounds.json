@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-05-12T06:59:31.267Z",
+  "fetchedAt": "2026-05-26T07:13:17.320Z",
   "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html",
   "rounds": [
     {
@@ -6656,6 +6656,32 @@
       "roundType": "Provincial Nominee Program",
       "invitationsIssued": 380,
       "crsScore": 798,
+      "distribution": {
+        "range601_1200": 372,
+        "range501_600": 15659,
+        "range491_500": 13325,
+        "range481_490": 13109,
+        "range471_480": 16598,
+        "range461_470": 16160,
+        "range451_460": 15108,
+        "range441_450": 14247,
+        "range431_440": 14171,
+        "range421_430": 12709,
+        "range411_420": 12096,
+        "range401_410": 11391,
+        "range351_400": 52286,
+        "range301_350": 18247,
+        "range0_300": 8292,
+        "total": 233770,
+        "asOfDate": "May 10, 2026"
+      }
+    },
+    {
+      "number": 416,
+      "date": "2026-05-25",
+      "roundType": "Provincial Nominee Program",
+      "invitationsIssued": 334,
+      "crsScore": 805,
       "distribution": {
         "range601_1200": 372,
         "range501_600": 15659,
