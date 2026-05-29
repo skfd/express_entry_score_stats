@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-05-28T07:21:32.990Z",
+  "fetchedAt": "2026-05-29T07:21:28.630Z",
   "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html",
   "rounds": [
     {
@@ -6708,6 +6708,32 @@
       "roundType": "Canadian Experience Class",
       "invitationsIssued": 3000,
       "crsScore": 518,
+      "distribution": {
+        "range601_1200": 332,
+        "range501_600": 17945,
+        "range491_500": 13449,
+        "range481_490": 13323,
+        "range471_480": 17040,
+        "range461_470": 16262,
+        "range451_460": 15274,
+        "range441_450": 14463,
+        "range431_440": 14401,
+        "range421_430": 12915,
+        "range411_420": 12402,
+        "range401_410": 11782,
+        "range351_400": 52581,
+        "range301_350": 18375,
+        "range0_300": 8303,
+        "total": 238847,
+        "asOfDate": "May 24, 2026"
+      }
+    },
+    {
+      "number": 418,
+      "date": "2026-05-28",
+      "roundType": "French-Language proficiency 2026-Version 2",
+      "invitationsIssued": 4500,
+      "crsScore": 409,
       "distribution": {
         "range601_1200": 332,
         "range501_600": 17945,
