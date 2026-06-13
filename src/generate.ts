@@ -436,6 +436,7 @@ function main() {
     }
     .footer a { color: var(--link); }
   </style>
+  <script data-goatcounter="https://express-entry-score-stats.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
   <h1>Canada Express Entry &mdash; CRS Score Trends</h1>
