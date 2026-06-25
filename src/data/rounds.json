@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-06-24T07:12:22.943Z",
+  "fetchedAt": "2026-06-25T07:12:45.110Z",
   "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html",
   "rounds": [
     {
@@ -6786,6 +6786,32 @@
       "roundType": "Canadian Experience Class",
       "invitationsIssued": 4000,
       "crsScore": 516,
+      "distribution": {
+        "range601_1200": 941,
+        "range501_600": 20012,
+        "range491_500": 13537,
+        "range481_490": 13598,
+        "range471_480": 17318,
+        "range461_470": 16358,
+        "range451_460": 15127,
+        "range441_450": 14147,
+        "range431_440": 13980,
+        "range421_430": 12584,
+        "range411_420": 12128,
+        "range401_410": 11968,
+        "range351_400": 51897,
+        "range301_350": 17946,
+        "range0_300": 8104,
+        "total": 239645,
+        "asOfDate": "June 21, 2026"
+      }
+    },
+    {
+      "number": 421,
+      "date": "2026-06-24",
+      "roundType": "Physicians with Canadian Work Experience, 2026-Version 1",
+      "invitationsIssued": 271,
+      "crsScore": 223,
       "distribution": {
         "range601_1200": 941,
         "range501_600": 20012,
