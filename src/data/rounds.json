@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-09-16T06:15:04.124Z",
+  "fetchedAt": "2026-09-17T06:15:08.979Z",
   "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html",
   "rounds": [
     {
@@ -7384,6 +7384,32 @@
       "roundType": "Canadian Experience Class",
       "invitationsIssued": 2000,
       "crsScore": 519,
+      "distribution": {
+        "range601_1200": 574,
+        "range501_600": 20784,
+        "range491_500": 12590,
+        "range481_490": 12426,
+        "range471_480": 16105,
+        "range461_470": 16163,
+        "range451_460": 14823,
+        "range441_450": 13657,
+        "range431_440": 13300,
+        "range421_430": 12064,
+        "range411_420": 11506,
+        "range401_410": 11033,
+        "range351_400": 46782,
+        "range301_350": 17240,
+        "range0_300": 7746,
+        "total": 226793,
+        "asOfDate": "September 13, 2026"
+      }
+    },
+    {
+      "number": 444,
+      "date": "2026-09-16",
+      "roundType": "Senior managers with Canadian Work Experience, 2026-Version 1",
+      "invitationsIssued": 250,
+      "crsScore": 389,
       "distribution": {
         "range601_1200": 574,
         "range501_600": 20784,
