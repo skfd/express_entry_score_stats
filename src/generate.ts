@@ -340,25 +340,6 @@ function main() {
     .pool-chip .chip-label { font-size: 0.75rem; color: var(--muted); }
     .pool-chip .chip-val { font-size: 1.1rem; font-weight: 650; }
     .hint { font-size: 0.875rem; color: var(--ink-2); margin-top: 12px; }
-    .results {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      gap: 8px;
-      margin-top: 16px;
-    }
-    .results:empty { display: none; }
-    .result {
-      border: 1px solid var(--hairline);
-      border-radius: 8px;
-      padding: 10px 12px;
-      background: var(--surface-raised);
-    }
-    .result .name { font-size: 0.8rem; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
-    .result .big { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
-    .result .big small { display: block; font-size: 0.8rem; font-weight: 500; color: var(--ink-2); }
-    .result .sub { font-size: 0.75rem; color: var(--ink-2); margin-top: 2px; }
-    .result .sub.good { color: var(--good-text); }
-    .result .sub.bad { color: var(--bad-text); }
     .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
 
     /* ---- Latest-draw tiles ---- */
@@ -443,7 +424,6 @@ function main() {
       .card { padding: 14px; }
       header h1 { font-size: 1.25rem; }
       .legend-row .fam { min-width: 0; width: 100%; }
-      .results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .tile .value { font-size: 1.25rem; }
     }
@@ -476,8 +456,6 @@ function main() {
         </div>
         <div class="legend" id="controls"></div>
       </div>
-      <p class="hint" id="scoreHint"></p>
-      <div class="results" id="scoreResults"></div>
       <div class="chart-toolbar">
         <div class="seg"><span class="seg-label">Range</span>
           <div class="toolbar-group" id="timeRange">
@@ -837,7 +815,7 @@ function main() {
       clearBtn.style.display = selectedPrograms.size ? '' : 'none';
       programsHintEl.textContent = selectedPrograms.size
         ? 'Tap to add or remove.'
-        : 'Tap the ones you qualify for, to focus the cards and chart on them.';
+        : 'Tap the ones you qualify for, to focus the chart on them.';
     }
     syncLegend();
 
@@ -920,7 +898,6 @@ function main() {
         chart.getDatasetMeta(i).hidden = isHidden(base);
       });
       chart.update();
-      if (userScore > 0) buildScoreResults(userScore);
     }
 
     function afterLegendChange() {
@@ -1041,8 +1018,6 @@ function main() {
     // ========== Score input + reference line + per-program results ==========
 
     const scoreInput = document.getElementById('scoreInput');
-    const scoreResultsEl = document.getElementById('scoreResults');
-    const scoreHintEl = document.getElementById('scoreHint');
 
     if (userScore > 0) scoreInput.value = userScore;
     applyScore(userScore);
@@ -1084,57 +1059,7 @@ function main() {
     function applyScore(score) {
       updateScoreLine();
       chart.update('none');
-      buildScoreResults(score);
       onScoreChanged(score);
-    }
-
-    // One card per visible program that held a round in the past 12 months:
-    // how many of its last 10 cutoffs the score met, and how the last one went.
-    function buildScoreResults(score) {
-      scoreResultsEl.innerHTML = '';
-      if (!score || score <= 0) {
-        scoreHintEl.textContent = 'Enter your score to see how it compares with each program’s recent rounds.';
-        return;
-      }
-
-      const latestT = Math.max(...originalDatasets.flatMap(ds => ds.data.map(d => new Date(d.x).getTime())));
-      let shown = 0;
-
-      originalDatasets.forEach(ds => {
-        if (isHidden(ds.label) || !ds.data.length) return;
-        const sorted = [...ds.data].sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
-        const last = sorted[sorted.length - 1];
-        if (!selectedPrograms.size && latestT - new Date(last.x).getTime() > 365 * DAY_MS) return;
-
-        const lastN = sorted.slice(-10);
-        const met = lastN.filter(d => d.y <= score).length;
-        const metLast = last.y <= score;
-
-        let status;
-        if (metLast) {
-          status = '<div class="sub good">✓ Met the last cutoff (' + last.y + ')</div>';
-        } else {
-          status = '<div class="sub bad">✗ Last cutoff ' + last.y + ' (+' + (last.y - score) + ')</div>';
-          if (projectionMode !== 'off') {
-            const projected = getProjectedCrossing(sorted, score, ds.label);
-            if (projected) status += '<div class="sub">Trend reaches you around ' + projected.replace(' *', '') + '</div>';
-          }
-        }
-
-        const card = document.createElement('div');
-        card.className = 'result';
-        card.innerHTML =
-          '<div class="name"><span class="dot" style="background:' + ds.borderColor + '"></span>' + esc(ds.label) + '</div>' +
-          '<div class="big">' + met + '/' + lastN.length + ' <small>recent cutoffs met</small></div>' +
-          status +
-          '<div class="sub">Last round ' + fmtDate(last.x, { year: 'numeric', month: 'short', day: 'numeric' }) + '</div>';
-        scoreResultsEl.appendChild(card);
-        shown++;
-      });
-
-      scoreHintEl.textContent = selectedPrograms.size
-        ? 'Your programs. A cutoff is met when your score is at or above it.'
-        : 'Programs that held a round in the past 12 months. A cutoff is met when your score is at or above it.';
     }
 
     // ========== Pool-aware projection helpers ==========
@@ -1181,132 +1106,6 @@ function main() {
       return total;
     }
 
-    // Find the distribution snapshot closest to a given date
-    function findClosestDist(dateMs) {
-      if (!distributionSnapshots.length) return null;
-      let best = null;
-      let bestDiff = Infinity;
-      for (const snap of distributionSnapshots) {
-        const diff = Math.abs(new Date(snap.date).getTime() - dateMs);
-        if (diff < bestDiff) { bestDiff = diff; best = snap; }
-      }
-      // Only use if within 30 days
-      if (bestDiff > 30 * 24 * 60 * 60 * 1000) return null;
-      return best;
-    }
-
-    // Slope of the last 3 points of a trailing moving average; plain linear fit
-    // when there are too few points to smooth. pts: [{x: ms, y}] sorted by x.
-    function maTailRegression(pts) {
-      if (pts.length < MOVING_AVG_WINDOW) return linearRegression(pts);
-      const smoothed = [];
-      for (let i = MOVING_AVG_WINDOW - 1; i < pts.length; i++) {
-        let sum = 0;
-        for (let j = i - MOVING_AVG_WINDOW + 1; j <= i; j++) sum += pts[j].y;
-        smoothed.push({ x: pts[i].x, y: sum / MOVING_AVG_WINDOW });
-      }
-      return linearRegression(smoothed.slice(-3));
-    }
-
-    function getProjectedCrossing(sorted, score, label) {
-      const pts = sorted.map(d => ({ x: new Date(d.x).getTime(), y: d.y }));
-
-      // Try pool-aware projection first
-      if (distributionSnapshots.length >= 3) {
-        const poolResult = getPoolAwareProjection(sorted, score, label);
-        if (poolResult) return poolResult;
-      }
-
-      // Fall back to the cutoff trend (same moving average as the chart)
-      const reg = maTailRegression(pts);
-      if (!reg) return null;
-
-      // Search forward up to 3 years for crossing point
-      const lastT = pts[pts.length - 1].x;
-      const maxT = lastT + 3 * 365.25 * 24 * 60 * 60 * 1000;
-      const step = 7 * 24 * 60 * 60 * 1000; // weekly
-
-      for (let t = lastT; t <= maxT; t += step) {
-        const projected = reg.eval(t);
-        if (projected <= score) {
-          const d = new Date(t);
-          return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short' });
-        }
-      }
-      return null;
-    }
-
-    // Pool-aware projection: uses competition ratio (candidates above cutoff / invitations)
-    // instead of raw CRS score trend. This accounts for the non-linear density of
-    // candidates at different score ranges — cutoffs stall at dense bands.
-    function getPoolAwareProjection(sorted, userScore, label) {
-      // Build competition ratio time series for this category
-      // For each historical round, compute: candidatesAboveCutoff / invitationsIssued
-      const ratioSeries = [];
-      for (const d of sorted) {
-        if (!d.invitations || d.invitations <= 0) continue;
-        const dateMs = new Date(d.x).getTime();
-        const dist = findClosestDist(dateMs);
-        if (!dist) continue;
-        const above = countAboveScore(dist, d.y);
-        ratioSeries.push({
-          x: dateMs,
-          ratio: above / d.invitations,
-          cutoff: d.y,
-          invitations: d.invitations,
-        });
-      }
-
-      if (ratioSeries.length < 3) return null;
-
-      // Current: how competitive is it for the user's score?
-      const latestDist = getLatestDistribution();
-      if (!latestDist) return null;
-      const userAbove = countAboveScore(latestDist, userScore);
-
-      // Get typical invitation size for this category (median of recent rounds)
-      const recentInvitations = sorted.slice(-10)
-        .map(d => d.invitations)
-        .filter(n => n > 0)
-        .sort((a, b) => a - b);
-      if (!recentInvitations.length) return null;
-      const medianInvitations = recentInvitations[Math.floor(recentInvitations.length / 2)];
-
-      const userRatio = userAbove / medianInvitations;
-
-      // If ratio is already <= 1, user would likely be invited now
-      if (userRatio <= 1.0) return null;
-
-      // Project how the competition ratio for the user's score has been changing
-      // Use the pool snapshots to compute the user's ratio at each snapshot
-      const userRatioSeries = [];
-      for (const snap of distributionSnapshots) {
-        const dateMs = new Date(snap.date).getTime();
-        const above = countAboveScore(snap, userScore);
-        userRatioSeries.push({ x: dateMs, y: above / medianInvitations });
-      }
-
-      if (userRatioSeries.length < 2) return null;
-
-      // Fit the same moving-average trend to the user's ratio
-      const reg = maTailRegression(userRatioSeries);
-      if (!reg) return null;
-
-      // Search forward for when the ratio drops to <= 1.0 (favorable)
-      const lastT = userRatioSeries[userRatioSeries.length - 1].x;
-      const maxT = lastT + 3 * 365.25 * 24 * 60 * 60 * 1000;
-      const step = 7 * 24 * 60 * 60 * 1000;
-
-      for (let t = lastT; t <= maxT; t += step) {
-        const projected = reg.eval(t);
-        if (projected <= 1.0) {
-          const d = new Date(t);
-          return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short' }) + ' *';
-        }
-      }
-      return null;
-    }
-
     // ========== Distribution Chart ==========
 
     const distRangeLabels = [
@@ -1316,11 +1115,11 @@ function main() {
     ];
 
     // Score bands are ordered, so they get one hue, light to dark (higher score
-    // = more ink on light, more light on dark). With a score entered, bands
-    // below it go neutral grey so the blue part is "candidates at or above you".
+    // = more ink on light, more light on dark). With a score entered, only the
+    // reader's band and those above it are drawn: the people ahead of them.
     const DIST_RAMP = {
-      light: { lo: '#86b6ef', hi: '#0d366b', below: '#dcdad3' },
-      dark: { lo: '#184f95', hi: '#b7d3f6', below: '#3a3a37' },
+      light: { lo: '#86b6ef', hi: '#0d366b' },
+      dark: { lo: '#184f95', hi: '#b7d3f6' },
     };
 
     function mixHex(a, b, t) {
@@ -1357,22 +1156,22 @@ function main() {
       const theme = getThemeColors();
       const ramp = DIST_RAMP[resolveTheme(currentTheme)];
       const cutIdx = userScore > 0 ? getScoreRangeIndex(userScore) : distRangeLabels.length - 1;
-      const n = distRangeLabels.length;
-      const colorFor = (i) => i <= cutIdx ? mixHex(ramp.lo, ramp.hi, (n - 1 - i) / (n - 1)) : ramp.below;
+      const shown = distRangeLabels.slice(0, cutIdx + 1);
+      // Spread the ramp over the bands shown so neighbours stay distinguishable
+      const colorFor = (i) => shown.length < 2 ? ramp.hi : mixHex(ramp.lo, ramp.hi, (shown.length - 1 - i) / (shown.length - 1));
 
       const sub = document.getElementById('distSubtitle');
       if (userScore > 0) {
         const latest = getLatestDistribution();
         const above = latest ? countAboveScore(latest, userScore) : 0;
-        sub.textContent = 'Candidates in the Express Entry pool by score range. Blue: your range (' +
-          distRangeLabels[cutIdx] + ') and above. Of those, about ' + above.toLocaleString() +
-          ' have ' + userScore + ' or more in the latest count. Grey: below your range.';
+        sub.textContent = 'Candidates in your score range (' + distRangeLabels[cutIdx] + ') and above. About ' +
+          above.toLocaleString() + ' have ' + userScore + ' or more in the latest count.';
       } else {
         sub.textContent = 'Candidates in the Express Entry pool by score range. Darker bands are higher scores.';
       }
 
       // One dataset per score range, stacked with the highest scores on top
-      const datasets = distRangeLabels.map((range, i) => ({ range, i })).reverse().map(({ range, i }) => ({
+      const datasets = shown.map((range, i) => ({ range, i })).reverse().map(({ range, i }) => ({
         label: range,
         data: filtered.map(s => ({ x: s.date, y: s.ranges[range] || 0 })),
         backgroundColor: colorFor(i),
@@ -1428,6 +1227,7 @@ function main() {
             },
             y: {
               stacked: true,
+              beginAtZero: true,
               grid: { color: theme.grid },
               border: { display: false },
               ticks: {
