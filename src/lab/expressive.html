@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>[Lab] Expressive - Express Entry CRS cutoffs</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23f59e0b' d='M32 4L29 12l-4-2 2 7-8-4 2 6H14l5 5-7 3 8 3-3 7 6-3 1 7 4-5 2 8h4l2-8 4 5 1-7 6 3-3-7 8-3-7-3 5-5h-7l2-6-8 4 2-7-4 2z'/%3E%3Crect fill='%23f59e0b' x='29' y='46' width='6' height='14' rx='1'/%3E%3C/svg%3E">
+<style>
+  /*
+    Colour belongs to the data (one hue per program), so the page itself is
+    neutral and "you" is drawn in full-contrast ink: the heaviest type, the
+    thickest line, the only pill on the chart.
+  */
+  :root {
+    color-scheme: light dark;
+    --page: #f9f9f7; --ink: #0b0b0b; --muted: #6f6d68; --faint: #e4e3dc;
+    --grid: #e6e5de; --chip: #eeede7; --pool: #d9d8d0; --pool-strong: #9d9c94;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --ink: #f0efec; --muted: #98968f; --faint: #2c2c2a;
+      --grid: #232321; --chip: #1f1f1e; --pool: #333331; --pool-strong: #75746e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+
+  .top { padding: 14px 16px 8px; }
+  h1 { margin: 0; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  .lab {
+    display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px;
+    background: var(--ink); color: var(--page);
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .you-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 24px; margin-top: 10px; }
+  .you-label {
+    display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  #score {
+    display: block; width: 2.5em; padding: 0; border: 0; border-bottom: 5px solid var(--faint);
+    border-radius: 0; background: none; color: var(--ink); caret-color: var(--ink); outline: none;
+    font: 800 clamp(64px, 19vw, 112px)/1 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.045em; font-variant-numeric: tabular-nums;
+    transition: border-color .15s;
+  }
+  #score::placeholder { color: var(--ink); opacity: .15; }
+  #score:focus { border-bottom-color: var(--ink); }
+  .lede { flex: 1 1 240px; max-width: 48ch; margin: 0 0 8px; color: var(--muted); font-size: 14px; }
+  .lede b { color: var(--ink); font-weight: 700; }
+  .key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink); vertical-align: -1px; }
+  .key.in { background: var(--ink); }
+
+  .chart { position: relative; height: clamp(380px, 64vh, 760px); height: clamp(380px, 64svh, 760px); }
+  svg { display: block; width: 100%; height: 100%; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+  svg text { font-family: inherit; font-variant-numeric: tabular-nums; }
+  .grid line { stroke: var(--grid); stroke-width: 1; }
+  .grid text, .hd { fill: var(--muted); font-size: 10.5px; }
+  .grid text { paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grid text.strong { font-weight: 700; }
+  .hd { font-weight: 700; letter-spacing: .08em; }
+  .pool rect { fill: var(--pool); }
+  .pool.ahead rect { fill: var(--pool-strong); }
+  .series { transition: opacity .25s; }
+  .series.off { opacity: 0; }
+  .ln { fill: none; stroke: var(--c); stroke-width: 1.5; stroke-linejoin: round; opacity: .55; }
+  .pt { fill: var(--c); fill-opacity: .5; stroke: var(--c); stroke-width: 1.5; transition: fill .2s, fill-opacity .2s; }
+  .pt.in { fill-opacity: .92; }
+  .pt.out { fill: var(--page); fill-opacity: .85; }
+  .ends line { stroke: var(--c); stroke-width: 1; opacity: .5; }
+  .ends circle { fill: var(--c); stroke: var(--c); stroke-width: 1.5; }
+  .ends circle.out { fill: var(--page); }
+  .ends text { paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round; }
+  .ends .num { fill: var(--ink); font-size: 13px; font-weight: 700; }
+  .ends .nm { fill: var(--muted); font-size: 10px; }
+  .you line { stroke: var(--ink); stroke-width: 2.5; }
+  .you .pill { fill: var(--ink); }
+  .you .pilltx { fill: var(--page); font-size: 10.5px; font-weight: 800; letter-spacing: .08em; }
+  .you .ahead {
+    fill: var(--ink); font-size: 11.5px; font-weight: 700;
+    paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round;
+  }
+  .ring { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
+
+  .pop {
+    position: absolute; z-index: 2; max-width: 230px; padding: 10px 13px 11px; border-radius: 16px;
+    background: var(--ink); color: var(--page); font-size: 12.5px; line-height: 1.35;
+    pointer-events: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+  }
+  .pop[hidden] { display: none; }
+  .pop .pk { font-weight: 700; }
+  .pop .pk i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; }
+  .pop .big { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .pop .vs { margin-top: 4px; font-weight: 700; }
+  .pop .ty { margin-top: 4px; opacity: .7; }
+
+  .controls { display: grid; gap: 14px; padding: 12px 16px 4px; }
+  .seg, .fam { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .fam-label {
+    flex: 0 0 100%; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .seg button, .chip {
+    min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--chip); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600;
+    transition: border-radius .3s cubic-bezier(.3, 1.6, .5, 1), background .15s, color .15s;
+  }
+  @media (pointer: coarse) { .seg button, .chip { min-height: 44px; } }
+  /* Shape carries state too: what is switched on is a pill, what is off is a box. */
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); border-radius: 999px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 0 13px 0 10px; border-radius: 999px; }
+  .chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px var(--c); }
+  .chip[aria-pressed="false"] { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--faint); border-radius: 10px; }
+  .chip[aria-pressed="false"] i { background: transparent; }
+  .link { padding: 8px 4px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .seg button, .chip, .series, .pt { transition: none; } }
+
+  footer { padding: 20px 16px 32px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1><span class="lab">Lab</span>Canada Express Entry &middot; CRS cutoffs &middot; <a href="../../">live page</a></h1>
+    <div class="you-row">
+      <label>
+        <span class="you-label">Your CRS score</span>
+        <input id="score" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="480" autocomplete="off">
+      </label>
+      <p class="lede" id="lede"></p>
+    </div>
+  </header>
+
+  <div class="chart" id="chart">
+    <svg id="svg" role="img"></svg>
+    <div class="pop" id="pop" hidden></div>
+  </div>
+
+  <section class="controls">
+    <div class="seg" id="ranges" role="group" aria-label="Time range"></div>
+    <div id="programs" role="group" aria-label="Programs"></div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = /*LAB_DATA*/null;
+
+(function () {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const DAY = 864e5;
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const RANGES = [['1y', 'Last year'], ['3y', 'Last 3 years'], ['all', 'All time']];
+
+  const darkQ = matchMedia('(prefers-color-scheme: dark)');
+  const reduceQ = matchMedia('(prefers-reduced-motion: reduce)');
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const DEFAULT_RANGE = innerWidth < 600 ? '1y' : '3y';
+
+  const nf = new Intl.NumberFormat('en-CA');
+  const df = new Intl.DateTimeFormat('en-CA', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const compact = n => n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.0', '') + 'k' : String(Math.round(n));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  // Circle area is proportional to invitations issued (7,000 invitations = radius 12)
+  const radius = n => clamp(12 * Math.sqrt(Math.max(0, n) / 7000), 2, 18);
+
+  // ---- Data ----------------------------------------------------------------
+  const programs = DATA.programs;
+  let tMin = Infinity, tMax = -Infinity;
+  for (const p of programs) {
+    p.pts = p.rounds.map(r => ({ t: r[0], s: r[1], n: r[2], no: r[3], type: r[4], r: radius(r[2]), p: p, state: -1 }));
+    for (const pt of p.pts) { tMin = Math.min(tMin, pt.t); tMax = Math.max(tMax, pt.t); }
+  }
+  const pool = DATA.pool;
+  let maxDensity = 0;
+  if (pool) for (const b of pool.bins) { b.d = b.n / (b.hi - b.lo + 1); maxDensity = Math.max(maxDensity, b.d); }
+
+  /** Candidates strictly above a score, spreading each bin evenly over its range. */
+  function ahead(score) {
+    let n = 0;
+    for (const b of pool.bins) {
+      if (score < b.lo) n += b.n;
+      else if (score < b.hi) n += b.n * (b.hi - score) / (b.hi - b.lo + 1);
+    }
+    return n;
+  }
+
+  // ---- State (kept in the URL, same parameters as the main page) -------------
+  const slugs = programs.map(p => p.slug);
+  const mainSlugs = programs.filter(p => p.family === 'main').map(p => p.slug);
+  const parseScore = v => { const n = parseInt(v, 10); return n >= 100 && n <= 1200 ? n : null; };
+  const q = new URLSearchParams(location.search);
+  const st = {
+    range: RANGES.some(r => r[0] === q.get('range')) ? q.get('range') : DEFAULT_RANGE,
+    score: parseScore(q.get('score')),
+    on: new Set(),
+  };
+  if (q.get('programs') === 'all') slugs.forEach(s => st.on.add(s));
+  else (q.get('programs') || '').split(',').forEach(s => { if (slugs.includes(s)) st.on.add(s); });
+  if (!st.on.size) mainSlugs.forEach(s => st.on.add(s));
+
+  function writeUrl() {
+    const p = new URLSearchParams();
+    if (st.score != null) p.set('score', st.score);
+    if (st.range !== DEFAULT_RANGE) p.set('range', st.range);
+    const on = slugs.filter(s => st.on.has(s));
+    if (on.length === slugs.length) p.set('programs', 'all');
+    else if (on.join() !== mainSlugs.join()) p.set('programs', on.join(','));
+    const qs = p.toString();
+    try { history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '')); } catch (e) { /* file:// */ }
+  }
+
+  // ---- SVG scaffolding --------------------------------------------------------
+  const chartEl = document.getElementById('chart');
+  const svg = document.getElementById('svg');
+  const pop = document.getElementById('pop');
+  function el(name, attrs, parent) {
+    const e = document.createElementNS(NS, name);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const defs = el('defs', {}, svg);
+  const clipPlotRect = el('rect', {}, el('clipPath', { id: 'clipPlot' }, defs));
+  const clipAheadRect = el('rect', {}, el('clipPath', { id: 'clipAhead' }, defs));
+  const gGrid = el('g', { class: 'grid' }, svg);
+  const gPool = el('g', { class: 'pool' }, svg);
+  const gPoolAhead = el('g', { class: 'pool ahead', 'clip-path': 'url(#clipAhead)' }, svg);
+  const gSeries = el('g', { 'clip-path': 'url(#clipPlot)' }, svg);
+  const gLabels = el('g', { class: 'grid' }, svg); // axis numbers stay readable over the circles
+  const gHead = el('g', {}, svg);
+  const gYou = el('g', { class: 'you' }, svg);
+  const youLine = el('line', {}, gYou);
+  const youPill = el('rect', { class: 'pill', width: 44, height: 22, rx: 11 }, gYou);
+  const youPillTx = el('text', { class: 'pilltx', 'text-anchor': 'middle' }, gYou);
+  youPillTx.textContent = 'YOU';
+  const youAhead = el('text', { class: 'ahead', 'text-anchor': 'end' }, gYou);
+  const gEnds = el('g', { class: 'ends' }, svg); // above the YOU line, so it never strikes a label through
+  const ring = el('circle', { class: 'ring', r: 0 }, svg);
+
+  const poolRects = pool ? pool.bins.map(() => [el('rect', { rx: 2 }, gPool), el('rect', { rx: 2 }, gPoolAhead)]) : [];
+
+  for (const p of programs) {
+    p.g = el('g', { class: 'series' }, gSeries);
+    p.path = p.line ? el('path', { class: 'ln' }, p.g) : null;
+    // Big circles first, so a small round is never buried under a large one
+    p.pts.slice().sort((a, b) => b.r - a.r).forEach(pt => { pt.el = el('circle', { class: 'pt', r: pt.r.toFixed(1) }, p.g); });
+  }
+  const colorOf = p => darkQ.matches ? p.dark : p.light;
+  function paint() { for (const p of programs) p.g.style.setProperty('--c', colorOf(p)); }
+  paint();
+
+  // ---- Layout and scales ------------------------------------------------------
+  let L = null;
+  function layout() {
+    const box = chartEl.getBoundingClientRect();
+    const W = Math.max(280, Math.round(box.width)), H = Math.round(box.height);
+    const small = W < 600;
+    const poolW = pool ? (small ? 54 : 120) : 0;
+    const gutter = small ? 64 : 92;
+    L = { W: W, H: H, small: small, top: 30, bottom: H - 26, plotR: W - poolW - gutter, poolL: W - poolW, poolW: poolW };
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    clipPlotRect.setAttribute('width', L.plotR + 4);
+    clipPlotRect.setAttribute('height', H);
+  }
+
+  // cur is what is on screen, tgt is where it is heading; both are
+  // { x0, x1, y0, y1, score, alpha } and a spring carries one to the other.
+  const KEYS = ['x0', 'x1', 'y0', 'y1', 'score', 'alpha'];
+  let cur = null, tgt = null, raf = 0, lastFrame = 0, started = 0;
+  const vel = {};
+  const X = t => 6 + (t - cur.x0) / (cur.x1 - cur.x0) * (L.plotR - 22);
+  const Y = s => L.bottom - (s - cur.y0) / (cur.y1 - cur.y0) * (L.bottom - L.top);
+
+  function target() {
+    const span = st.range === '1y' ? 365 * DAY : st.range === '3y' ? 3 * 365 * DAY : tMax - tMin;
+    const x1 = tMax, x0 = tMax - span;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      for (const pt of p.pts) if (pt.t >= x0) { lo = Math.min(lo, pt.s); hi = Math.max(hi, pt.s); }
+    }
+    if (lo === Infinity) { lo = 400; hi = 550; }
+    if (st.score != null) { lo = Math.min(lo, st.score); hi = Math.max(hi, st.score); }
+    const pad = Math.max((hi - lo) * 0.09, 14);
+    return {
+      x0: x0, x1: x1,
+      y0: Math.floor((lo - pad) / 10) * 10, y1: Math.ceil((hi + pad) / 10) * 10,
+      score: st.score != null ? st.score : (cur ? cur.score : (lo + hi) / 2),
+      alpha: st.score != null ? 1 : 0,
+    };
+  }
+
+  function go(animate) {
+    hidePop();
+    tgt = target();
+    if (!cur || !animate || reduceQ.matches) {
+      cur = Object.assign({}, tgt);
+      KEYS.forEach(k => { vel[k] = 0; });
+      draw();
+      return;
+    }
+    // A score entered for the first time rises from the bottom of the chart,
+    // filling the circles it passes.
+    if (cur.alpha < 0.02 && tgt.alpha === 1) { cur.score = cur.y0; vel.score = 0; }
+    started = performance.now();
+    if (!raf) { lastFrame = started; raf = requestAnimationFrame(tick); }
+  }
+
+  function tick(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    const K = 150, C = 20; // a spring with a little overshoot
+    const steps = Math.max(1, Math.ceil(dt / 0.004)), h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      for (const k of KEYS) {
+        vel[k] += (-K * (cur[k] - tgt[k]) - C * vel[k]) * h;
+        cur[k] += vel[k] * h;
+      }
+    }
+    const sx = tgt.x1 - tgt.x0, sy = tgt.y1 - tgt.y0;
+    const scale = { x0: sx, x1: sx, y0: sy, y1: sy, score: sy, alpha: 1 };
+    const moving = KEYS.some(k => Math.abs(cur[k] - tgt[k]) > scale[k] * 4e-4 || Math.abs(vel[k]) > scale[k] * 4e-3);
+    if (!moving || now - started > 3000) {
+      cur = Object.assign({}, tgt);
+      KEYS.forEach(k => { vel[k] = 0; });
+      raf = 0;
+      draw();
+      return;
+    }
+    draw();
+    raf = requestAnimationFrame(tick);
+  }
+
+  // ---- Drawing ----------------------------------------------------------------
+  function yStep() {
+    const span = tgt.y1 - tgt.y0, max = Math.max(3, Math.floor((L.bottom - L.top) / 60));
+    for (const s of [10, 20, 25, 50, 100, 200, 250, 500]) if (span / s <= max) return s;
+    return 1000;
+  }
+
+  function xTicks() {
+    const out = [], days = (cur.x1 - cur.x0) / DAY, pw = L.plotR;
+    const first = new Date(cur.x0), y0 = first.getUTCFullYear();
+    if (days < 500) {
+      const px = pw / (days / 30.44), step = px >= 46 ? 1 : px >= 23 ? 2 : 3;
+      for (let y = y0, m = first.getUTCMonth(); ; m++) {
+        if (m > 11) { m = 0; y++; }
+        const t = Date.UTC(y, m, 1);
+        if (t > cur.x1) break;
+        if (t >= cur.x0 && m % step === 0) out.push({ t: t, label: m === 0 ? String(y) : MONTHS[m], strong: m === 0 });
+      }
+    } else {
+      const px = pw / (days / 365.25), step = px >= 46 ? 1 : px >= 23 ? 2 : 5;
+      for (let y = y0; ; y++) {
+        const t = Date.UTC(y, 0, 1);
+        if (t > cur.x1) break;
+        if (t >= cur.x0 && y % step === 0) out.push({ t: t, label: String(y), strong: false });
+      }
+    }
+    return out;
+  }
+
+  function draw() {
+    const W = L.W, H = L.H, top = L.top, bottom = L.bottom, plotR = L.plotR;
+    const hasScore = tgt.alpha === 1;
+    const sc = cur.score;
+    const f = v => v.toFixed(1);
+
+    // Grid: score lines run under the pool too, since both read off one axis
+    let g = '', labels = '';
+    const step = yStep();
+    for (let v = Math.ceil(cur.y0 / step) * step; v <= cur.y1; v += step) {
+      const y = Y(v);
+      if (y < top - 4 || y > bottom + 1) continue;
+      g += '<line x1="0" x2="' + W + '" y1="' + f(y) + '" y2="' + f(y) + '"/>';
+      // The YOU pill sits at the left edge too; it wins over a number it would cover
+      if (hasScore && Math.abs(y - 4 - Y(sc)) < 15) continue;
+      labels += '<text x="6" y="' + f(y - 4) + '">' + v + '</text>';
+    }
+    for (const tk of xTicks()) {
+      const x = X(tk.t);
+      if (x < 0 || x > plotR - 26) continue;
+      g += '<line x1="' + f(x) + '" x2="' + f(x) + '" y1="' + top + '" y2="' + (bottom + 6) + '"/>';
+      labels += '<text' + (tk.strong ? ' class="strong"' : '') + ' x="' + f(x + 4) + '" y="' + (H - 8) + '">' + tk.label + '</text>';
+    }
+    gGrid.innerHTML = g;
+    gLabels.innerHTML = labels;
+
+    // Pool: bar length is candidates per CRS point, so uneven bins compare fairly
+    if (pool) {
+      pool.bins.forEach((b, i) => {
+        const y1 = Math.max(Y(b.hi + 0.5), top), y2 = Math.min(Y(b.lo - 0.5), bottom);
+        const h = y2 - y1 - 1;
+        const w = h > 0 ? Math.max(1, b.d / maxDensity * (L.poolW - 8)) : 0;
+        for (const r of poolRects[i]) {
+          r.setAttribute('x', L.poolL);
+          r.setAttribute('y', f(y1));
+          r.setAttribute('width', f(w));
+          r.setAttribute('height', f(Math.max(0, h)));
+        }
+      });
+      clipAheadRect.setAttribute('x', L.poolL);
+      clipAheadRect.setAttribute('width', L.poolW);
+      clipAheadRect.setAttribute('height', f(hasScore ? Math.max(0, Y(sc)) : 0));
+    }
+
+    // Rounds: solid where your score clears the cutoff, hollow where it does not
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      let d = '';
+      for (const pt of p.pts) {
+        const x = f(X(pt.t)), y = f(Y(pt.s));
+        pt.el.setAttribute('cx', x);
+        pt.el.setAttribute('cy', y);
+        if (p.path) d += (d ? 'L' : 'M') + x + ' ' + y;
+        const state = hasScore ? (pt.s <= sc ? 1 : 0) : 2;
+        if (state !== pt.state) {
+          pt.state = state;
+          pt.el.setAttribute('class', state === 1 ? 'pt in' : state === 0 ? 'pt out' : 'pt');
+        }
+      }
+      if (p.path) p.path.setAttribute('d', d);
+    }
+
+    drawEnds();
+
+    gHead.innerHTML = '<text class="hd" x="' + (plotR + 8) + '" y="14">LATEST</text>' +
+      (pool ? '<text class="hd" x="' + L.poolL + '" y="14">POOL</text>' : '');
+
+    // You
+    const a = clamp(cur.alpha, 0, 1);
+    gYou.setAttribute('opacity', a.toFixed(2));
+    gYou.style.display = a < 0.01 ? 'none' : '';
+    const yy = clamp(Y(sc), top - 12, bottom + 12);
+    youLine.setAttribute('x1', 0); youLine.setAttribute('x2', W);
+    youLine.setAttribute('y1', f(yy)); youLine.setAttribute('y2', f(yy));
+    youPill.setAttribute('x', 36); youPill.setAttribute('y', f(yy - 11));
+    youPillTx.setAttribute('x', 58); youPillTx.setAttribute('y', f(yy + 3.8));
+    if (pool) {
+      youAhead.setAttribute('x', W - 6);
+      youAhead.setAttribute('y', f(yy < top + 22 ? yy + 16 : yy - 7));
+      youAhead.textContent = compact(ahead(clamp(sc, 0, 1200))) + ' ahead';
+    }
+  }
+
+  /** Labels at the right edge: each program's latest cutoff, nudged apart. */
+  function drawEnds() {
+    const span = cur.x1 - cur.x0, items = [];
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      const last = p.pts[p.pts.length - 1];
+      // A program that has not drawn lately would need a leader across the chart
+      if (tMax - last.t > span * 0.25) continue;
+      items.push({ p: p, last: last, y: Y(last.s) });
+    }
+    items.sort((a, b) => a.y - b.y);
+    const GAP = 28, lo = L.top + 6, hi = L.bottom - 14;
+    items.forEach((it, i) => { it.ly = Math.max(it.y, i ? items[i - 1].ly + GAP : lo); });
+    for (let i = items.length - 1; i >= 0; i--) {
+      items[i].ly = Math.min(items[i].ly, i < items.length - 1 ? items[i + 1].ly - GAP : hi);
+    }
+    const x = L.plotR;
+    let s = '';
+    for (const it of items) {
+      const cleared = st.score == null || it.last.s <= st.score;
+      const fromX = Math.min(X(it.last.t) + it.last.r + 2, x + 2);
+      s += '<g style="--c:' + colorOf(it.p) + '">' +
+        '<line x1="' + fromX.toFixed(1) + '" y1="' + it.y.toFixed(1) + '" x2="' + (x + 6) + '" y2="' + it.ly.toFixed(1) + '"/>' +
+        '<circle' + (cleared ? '' : ' class="out"') + ' cx="' + (x + 11) + '" cy="' + it.ly.toFixed(1) + '" r="3.5"/>' +
+        '<text class="num" x="' + (x + 19) + '" y="' + (it.ly + 4.5).toFixed(1) + '">' + it.last.s + '</text>' +
+        '<text class="nm" x="' + (x + 19) + '" y="' + (it.ly + 15.5).toFixed(1) + '">' + esc(it.p.short) + '</text>' +
+        '</g>';
+    }
+    gEnds.innerHTML = s;
+  }
+
+  // ---- Popup: tap or hover a round or a pool bar ------------------------------
+  function hidePop() { pop.hidden = true; ring.setAttribute('r', 0); }
+
+  function showPop(html, x, yTop, yBottom) {
+    pop.innerHTML = html;
+    pop.hidden = false;
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = clamp(x - w / 2, 6, L.W - w - 6) + 'px';
+    pop.style.top = (yTop - h - 10 >= 0 ? yTop - h - 10 : yBottom + 10) + 'px';
+  }
+
+  function nearest(px, py) {
+    const reach = coarse ? 30 : 16;
+    let best = null, bestEdge = Infinity, bestCentre = Infinity;
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      for (const pt of p.pts) {
+        const x = X(pt.t);
+        if (x < -20 || x > L.plotR + 4) continue;
+        const centre = Math.hypot(x - px, Y(pt.s) - py), edge = Math.max(0, centre - pt.r);
+        if (edge > reach) continue;
+        if (edge < bestEdge || (edge === bestEdge && centre < bestCentre)) { best = pt; bestEdge = edge; bestCentre = centre; }
+      }
+    }
+    return best;
+  }
+
+  function probe(e) {
+    if (!cur) return;
+    const box = chartEl.getBoundingClientRect();
+    const px = e.clientX - box.left, py = e.clientY - box.top;
+    if (pool && px >= L.poolL) {
+      const b = pool.bins.find(b => py >= Y(b.hi + 0.5) && py <= Y(b.lo - 0.5));
+      if (!b || py < L.top || py > L.bottom) return hidePop();
+      ring.setAttribute('r', 0);
+      const y = clamp((Y(b.hi + 0.5) + Y(b.lo - 0.5)) / 2, L.top, L.bottom);
+      return showPop('<div class="pk">CRS ' + b.lo + '&ndash;' + b.hi + '</div><div class="big">' + nf.format(b.n) +
+        '</div><div>candidates in the pool</div><div class="ty">' + esc(poolDate()) + '</div>', px, y - 8, y + 8);
+    }
+    const pt = nearest(px, py);
+    if (!pt) return hidePop();
+    const x = X(pt.t), y = Y(pt.s);
+    ring.setAttribute('cx', x.toFixed(1)); ring.setAttribute('cy', y.toFixed(1)); ring.setAttribute('r', (pt.r + 4).toFixed(1));
+    let html = '<div class="pk"><i style="background:' + colorOf(pt.p) + '"></i>' + esc(pt.p.label) + '</div>' +
+      '<div class="big">' + pt.s + '</div>' +
+      '<div>' + df.format(pt.t) + ' &middot; ' + nf.format(pt.n) + ' invited</div>';
+    if (st.score != null) {
+      const gap = st.score - pt.s;
+      html += '<div class="vs">' + (gap >= 0 ? 'Your ' + st.score + ' clears it' + (gap ? ' by ' + gap : '') : 'Your ' + st.score + ' is ' + (-gap) + ' short') + '</div>';
+    }
+    if (pt.type !== pt.p.label) html += '<div class="ty">' + esc(pt.type) + '</div>';
+    showPop(html, x, y - pt.r - 4, y + pt.r + 4);
+  }
+
+  chartEl.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') probe(e); });
+  chartEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hidePop(); });
+  chartEl.addEventListener('click', probe);
+
+  // ---- Words ------------------------------------------------------------------
+  function poolDate() {
+    const t = Date.parse(pool.asOf);
+    return 'Pool as of ' + (isNaN(t) ? pool.asOf : df.format(t));
+  }
+
+  function words() {
+    const lede = document.getElementById('lede');
+    if (st.score == null) {
+      lede.innerHTML = 'Each circle is one round, placed at the lowest score invited. ' +
+        '<b>Type your score</b> to see which rounds you would have cleared.';
+    } else {
+      lede.innerHTML = '<span class="key in"></span> rounds <b>' + st.score + '</b> would have cleared, ' +
+        '<span class="key"></span> rounds it would have missed.' +
+        (pool ? ' About <b>' + nf.format(Math.round(ahead(st.score))) + '</b> of ' + nf.format(pool.total) +
+          ' candidates in the pool are ahead of you.' : '');
+    }
+    const latest = programs.filter(p => st.on.has(p.slug)).map(p => {
+      const l = p.pts[p.pts.length - 1];
+      return p.label + ' ' + l.s + ' on ' + df.format(l.t);
+    });
+    svg.setAttribute('aria-label', 'CRS cutoff of every Express Entry round over time, by program. Latest cutoffs: ' +
+      latest.join('; ') + '.' + (st.score != null ? ' Your score: ' + st.score + '.' : ''));
+  }
+
+  // ---- Controls ---------------------------------------------------------------
+  const rangesEl = document.getElementById('ranges');
+  const programsEl = document.getElementById('programs');
+  const input = document.getElementById('score');
+
+  function button(cls, html, parent, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    if (cls) b.className = cls;
+    b.innerHTML = html;
+    b.addEventListener('click', onClick);
+    parent.appendChild(b);
+    return b;
+  }
+
+  RANGES.forEach(r => { button('', r[1], rangesEl, () => { st.range = r[0]; apply(); }).dataset.range = r[0]; });
+
+  programsEl.style.display = 'grid';
+  programsEl.style.gap = '12px';
+  for (const fam of DATA.families) {
+    const members = programs.filter(p => p.family === fam.id);
+    if (!members.length) continue;
+    const row = document.createElement('div');
+    row.className = 'fam';
+    const label = document.createElement('span');
+    label.className = 'fam-label';
+    label.textContent = fam.label;
+    row.appendChild(label);
+    for (const p of members) {
+      p.chip = button('chip', '<i></i>' + esc(p.short), row, () => {
+        if (st.on.has(p.slug)) st.on.delete(p.slug); else st.on.add(p.slug);
+        apply();
+      });
+      p.chip.title = p.label;
+    }
+    programsEl.appendChild(row);
+  }
+  const quick = document.createElement('div');
+  quick.className = 'fam';
+  button('link', 'Main programs only', quick, () => { st.on = new Set(mainSlugs); apply(); });
+  button('link', 'Show all', quick, () => { st.on = new Set(slugs); apply(); });
+  programsEl.appendChild(quick);
+
+  input.value = st.score != null ? st.score : '';
+  input.addEventListener('input', () => {
+    const digits = input.value.replace(/[^0-9]/g, '');
+    if (digits !== input.value) input.value = digits;
+    // Half-typed numbers (4, 48) leave the line where it was
+    if (digits === '') st.score = null;
+    else if (parseScore(digits) != null) st.score = parseScore(digits);
+    else return;
+    apply();
+  });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+
+  function apply(animate) {
+    for (const b of rangesEl.children) b.setAttribute('aria-pressed', String(b.dataset.range === st.range));
+    for (const p of programs) {
+      const on = st.on.has(p.slug);
+      p.g.classList.toggle('off', !on);
+      p.chip.setAttribute('aria-pressed', String(on));
+      p.chip.style.setProperty('--c', colorOf(p));
+    }
+    writeUrl();
+    words();
+    go(animate !== false);
+  }
+
+  document.getElementById('footer').innerHTML =
+    'A lab experiment, not the live page. Contains information licensed under the ' +
+    '<a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence &ndash; Canada</a>. ' +
+    'Data: <a href="' + esc(DATA.source) + '">IRCC Express Entry rounds</a>, ' + DATA.roundCount + ' rounds, fetched ' +
+    df.format(Date.parse(DATA.fetchedAt)) + '. ' +
+    '<a href="../">More experiments</a> &middot; <a href="https://github.com/skfd/express_entry_score_stats">GitHub</a>';
+
+  darkQ.addEventListener('change', () => { paint(); apply(false); });
+  new ResizeObserver(() => { layout(); if (cur) go(false); }).observe(chartEl);
+
+  layout();
+  apply(false);
+})();
+</script>
+</body>
+</html>
