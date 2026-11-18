@@ -415,6 +415,14 @@ function main() {
     .chip.off .dot { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--muted); }
 
     .chart-box { position: relative; }
+    /* The YOU arrow on the pool chart: tilted, bobbing toward your spot */
+    .you-arrow { position: absolute; left: 0; top: 0; width: 92px; height: 44px; pointer-events: none;
+      transform-origin: 100% 50%; display: none; z-index: 2; }
+    .you-arrow svg { display: block; width: 100%; height: 100%; overflow: visible;
+      animation: you-bob 1.3s ease-in-out infinite; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35)); }
+    @keyframes you-bob { 0%, 100% { transform: translateX(-8px); } 50% { transform: translateX(-1px); } }
+    @media (prefers-reduced-motion: reduce) { .you-arrow svg { animation: none; transform: translateX(-2px); } }
+    @media (max-width: 600px) { .you-arrow { width: 74px; height: 36px; } }
     canvas { width: 100% !important; }
 
     .beta-banner {
@@ -459,7 +467,7 @@ function main() {
         <div class="programs-head">
           <span class="programs-title">Your programs</span>
           <span class="programs-hint" id="programsHint"></span>
-          <button id="clearPrograms" class="link-btn">Clear</button>
+          <button id="clearPrograms" class="link-btn">Show all</button>
         </div>
         <div class="legend" id="controls"></div>
       </div>
@@ -539,10 +547,16 @@ function main() {
 
     // ========== URL state persistence ==========
 
+    // Phones start on the last year: three years of circles is a smear at 390px.
+    const DEFAULT_RANGE = window.innerWidth < 600 ? '1y' : '3y';
+    // With no ?programs=, the main programs are picked; ?programs=all shows everything.
+    const MAIN_PROGRAMS = originalDatasets.filter(ds => ds.family === 'main').map(ds => ds.label);
+
     function readURL() {
       const p = new URLSearchParams(window.location.search);
       return {
-        range: ['1y', 'all'].includes(p.get('range')) ? p.get('range') : '3y',
+        range: ['1y', '3y', 'all'].includes(p.get('range')) ? p.get('range') : DEFAULT_RANGE,
+        hasPrograms: p.has('programs'),
         programs: p.get('programs') ? p.get('programs').split(',').filter(Boolean) : [],
         // Older links hid programs by position: ?hide=0,2
         hide: p.get('hide') ? p.get('hide').split(',').filter(Boolean) : [],
@@ -553,8 +567,10 @@ function main() {
 
     function writeURL() {
       const p = new URLSearchParams();
-      if (timeRange !== '3y') p.set('range', timeRange);
-      if (selectedPrograms.size > 0) {
+      if (timeRange !== DEFAULT_RANGE) p.set('range', timeRange);
+      if (selectedPrograms.size === 0) {
+        p.set('programs', 'all');
+      } else if (!isMainPick()) {
         p.set('programs', originalDatasets.filter(ds => selectedPrograms.has(ds.label)).map(ds => ds.slug).join(','));
       }
       if (userScore > 0) p.set('score', String(userScore));
@@ -569,8 +585,10 @@ function main() {
     let userScore = initState.score ? parseInt(initState.score, 10) : 0;
     let currentTheme = initState.theme;
 
-    // The reader's programs. Empty = nothing picked = show everything.
+    // The reader's programs. Empty = show everything.
     const selectedPrograms = new Set();
+    const pickMain = () => { selectedPrograms.clear(); MAIN_PROGRAMS.forEach(l => selectedPrograms.add(l)); };
+    const isMainPick = () => selectedPrograms.size === MAIN_PROGRAMS.length && MAIN_PROGRAMS.every(l => selectedPrograms.has(l));
     initState.programs.forEach(slug => {
       const ds = originalDatasets.find(d => d.slug === slug);
       if (ds) selectedPrograms.add(ds.label);
@@ -579,6 +597,8 @@ function main() {
       const hidden = new Set(initState.hide.map(i => parseInt(i, 10)));
       originalDatasets.forEach((ds, i) => { if (!hidden.has(i)) selectedPrograms.add(ds.label); });
       if (selectedPrograms.size === originalDatasets.length) selectedPrograms.clear();
+    } else if (!selectedPrograms.size && !initState.hasPrograms) {
+      pickMain();
     }
     const isHidden = (label) => selectedPrograms.size > 0 && !selectedPrograms.has(label);
 
@@ -685,7 +705,7 @@ function main() {
     }
 
     // ========== Your programs (also the chart legend) ==========
-    // First tap picks just that program; later taps add or remove. Clear = all.
+    // Starts on the main programs; taps add or remove. "Show all" empties the pick.
 
     const controlsEl = document.getElementById('controls');
     const categoryButtons = [];
@@ -719,7 +739,11 @@ function main() {
 
     const clearBtn = document.getElementById('clearPrograms');
     const programsHintEl = document.getElementById('programsHint');
-    clearBtn.onclick = () => { selectedPrograms.clear(); afterLegendChange(); };
+    // One link flips between "everything" and the default main programs
+    clearBtn.onclick = () => {
+      if (selectedPrograms.size) selectedPrograms.clear(); else pickMain();
+      afterLegendChange();
+    };
 
     function syncLegend() {
       categoryButtons.forEach((btn, i) => {
@@ -729,19 +753,60 @@ function main() {
         btn.classList.toggle('off', isHidden(label));
         btn.setAttribute('aria-pressed', String(selectedPrograms.has(label)));
       });
-      clearBtn.style.display = selectedPrograms.size ? '' : 'none';
-      programsHintEl.textContent = selectedPrograms.size
-        ? 'Tap to add or remove.'
-        : 'Tap the ones you qualify for, to focus the chart on them.';
+      clearBtn.textContent = selectedPrograms.size ? 'Show all' : 'Main programs only';
+      programsHintEl.textContent = !selectedPrograms.size
+        ? 'Showing every program. Tap the ones you qualify for, to focus the chart on them.'
+        : isMainPick()
+          ? 'Main programs to start. Tap to add or remove.'
+          : 'Tap to add or remove.';
     }
     syncLegend();
 
     // ========== Chart ==========
 
+    // ========== Keep circles off the score line ==========
+    // A circle straddling the dashed line hides which side of it the cutoff is on.
+    // Circles that touch the line are pushed clear of it: a cutoff above your score
+    // goes above, one at or below it (you would have been invited) goes below.
+    // Only the drawn and tapped position moves, and it is put back straight after,
+    // so tooltips keep the real cutoff and animations never see the nudge.
+    const REPEL_GAP = 2;
+    let repelDepth = 0;
+    function nudgeOffScoreLine(c, apply) {
+      if (apply ? repelDepth++ > 0 : --repelDepth > 0) return;
+      c.data.datasets.forEach((ds, di) => {
+        const meta = c.getDatasetMeta(di);
+        meta.data.forEach((el, j) => {
+          // The line's curve control points move with the point, or the line spikes
+          const shift = (d) => { el.y += d; if (el.cp1y != null) { el.cp1y += d; el.cp2y += d; } };
+          if (!apply) { if (el.$repel) { shift(-el.$repel); el.$repel = 0; } return; }
+          el.$repel = 0;
+          if (!(userScore > 0) || !c.isDatasetVisible(di) || !ds.data[j]) return;
+          const lineY = c.scales.y.getPixelForValue(userScore);
+          const o = el.options || {};
+          const r = (o.radius || 3) + (o.borderWidth || 0) / 2 + REPEL_GAP;
+          // Only circles overlapping the line; one mid-animation far away is left alone
+          if (Math.abs(el.y - lineY) >= r) return;
+          const target = ds.data[j].y > userScore ? lineY - r : lineY + r;
+          el.$repel = target - el.y;
+          shift(el.$repel);
+        });
+      });
+    }
+    const repelPlugin = {
+      id: 'repelFromScore',
+      beforeDatasetsDraw: (c) => nudgeOffScoreLine(c, true),
+      afterDatasetsDraw: (c) => nudgeOffScoreLine(c, false),
+      // Hover and tap hit-test against the nudged positions too
+      beforeEvent: (c) => nudgeOffScoreLine(c, true),
+      afterEvent: (c) => nudgeOffScoreLine(c, false),
+    };
+
     const ctx = document.getElementById('chart').getContext('2d');
     const chart = new Chart(ctx, {
       type: 'scatter',
       data: { datasets: buildDatasets() },
+      plugins: [repelPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -910,11 +975,16 @@ function main() {
           esc(latest.prog) + ' &middot; ' + fmtDate(latest.x) + ' &middot; ' + latest.invitations.toLocaleString() + ' invited') +
         tile('Since the last draw', days + (days === 1 ? ' day' : ' days'),
           last30 + ' round' + (last30 !== 1 ? 's' : '') + ' in the 30 days before it') +
-        '<div class="tile"><div class="label">Invitations per year' + (selectedPrograms.size ? ', your programs' : '') +
+        '<div class="tile"><div class="label">Invitations per year' + pickSuffix() +
         ' <span title="' + latestYear + ' so far">(* so far)</span></div><div class="years">' +
         (yearRows || '<span>No rounds</span>') + '</div></div>' +
-        '<div class="tile"><div class="label">Median cutoff, last 6 months' + (selectedPrograms.size ? ', your programs' : '') +
-        '</div><div class="rows">' + (progRows || '<div>No rounds in your programs</div>') + '</div></div>';
+        '<div class="tile"><div class="label">Median cutoff, last 6 months' + pickSuffix() +
+        '</div><div class="rows">' + (progRows || '<div>No rounds in these programs</div>') + '</div></div>';
+    }
+
+    function pickSuffix() {
+      if (!selectedPrograms.size) return '';
+      return isMainPick() ? ', main programs' : ', your programs';
     }
 
     function tile(label, value, sub) {
@@ -1043,6 +1113,52 @@ function main() {
 
     let distChartRef = null;
 
+    // ========== YOU arrow ==========
+    // Bands are stacked with the highest scores on top, so the reader sits at
+    // (everything shown) minus (everyone scoring at least as much), on the latest
+    // count. One arrow, reused across rebuilds; hidden until a score is entered.
+    const youArrow = document.createElement('div');
+    youArrow.className = 'you-arrow';
+    youArrow.setAttribute('aria-hidden', 'true');
+    youArrow.innerHTML =
+      '<svg viewBox="0 0 92 44">' +
+        '<g stroke="#f59e0b" stroke-width="3" stroke-linecap="round">' +
+          '<path d="M-6 14h7M-12 22h10M-6 30h7"/>' +
+        '</g>' +
+        '<path d="M5 12H58V3L89 22L58 41V32H5Z" fill="#f59e0b" stroke="#f59e0b" stroke-width="5" stroke-linejoin="round"/>' +
+        '<text x="33" y="27.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="800" ' +
+          'letter-spacing="1.5" fill="#241600">YOU</text>' +
+      '</svg>';
+    document.getElementById('distChartContainer').appendChild(youArrow);
+    let youSpot = null; // { x: snapshot date, y: stacked count } or null
+
+    const youPlugin = {
+      id: 'youArrow',
+      afterDatasetsDraw(c) {
+        if (!youSpot) { youArrow.style.display = 'none'; return; }
+        const area = c.chartArea;
+        const x = Math.min(area.right, c.scales.x.getPixelForValue(c.scales.x.parse(youSpot.x)));
+        const y = Math.max(area.top, Math.min(area.bottom, c.scales.y.getPixelForValue(youSpot.y)));
+        // A fixed dot marks the exact spot; the arrow bobs at it
+        const t = getThemeColors();
+        const g = c.ctx;
+        g.save();
+        g.beginPath();
+        g.arc(x, y, 4.5, 0, Math.PI * 2);
+        g.fillStyle = t.ink;
+        g.strokeStyle = t.surface;
+        g.lineWidth = 2;
+        g.fill();
+        g.stroke();
+        g.restore();
+        youArrow.style.display = 'block';
+        const w = youArrow.offsetWidth, h = youArrow.offsetHeight;
+        // Tilt toward the spot from the upper left; from below when the spot is near the top
+        const tilt = y - area.top < 40 ? -16 : 16;
+        youArrow.style.transform = 'translate(' + (x - w - 3) + 'px,' + (y - h / 2) + 'px) rotate(' + tilt + 'deg)';
+      },
+    };
+
     function getLatestDistribution() {
       if (!distributionSnapshots.length) return null;
       return distributionSnapshots[distributionSnapshots.length - 1];
@@ -1064,13 +1180,19 @@ function main() {
         ? distributionSnapshots.filter(s => new Date(s.date).getTime() >= cutoff)
         : distributionSnapshots;
 
-      if (!filtered.length) return;
+      youSpot = null;
+      if (!filtered.length) { youArrow.style.display = 'none'; return; }
 
       const theme = getThemeColors();
       const ramp = DIST_RAMP[resolveTheme(currentTheme)];
       const cutIdx = userScore > 0 ? getScoreRangeIndex(userScore) : distRangeLabels.length - 1;
       const shown = distRangeLabels.slice(0, cutIdx + 1);
       // Spread the ramp over the bands shown so neighbours stay distinguishable
+      if (userScore > 0) {
+        const last = filtered[filtered.length - 1];
+        const shownTotal = shown.reduce((sum, r) => sum + (last.ranges[r] || 0), 0);
+        youSpot = { x: last.date, y: Math.max(0, shownTotal - countAboveScore(last, userScore)) };
+      }
       const colorFor = (i) => shown.length < 2 ? ramp.hi : mixHex(ramp.lo, ramp.hi, (shown.length - 1 - i) / (shown.length - 1));
 
       const sub = document.getElementById('distSubtitle');
@@ -1099,6 +1221,7 @@ function main() {
       distChartRef = new Chart(dCtx, {
         type: 'line',
         data: { datasets },
+        plugins: [youPlugin],
         options: {
           responsive: true,
           maintainAspectRatio: false,
