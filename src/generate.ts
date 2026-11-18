@@ -471,12 +471,6 @@ function main() {
             <button data-range="all">All time</button>
           </div>
         </div>
-        <div class="seg"><span class="seg-label">Trend</span>
-          <div class="toolbar-group" id="projectionMode">
-            <button class="active" data-proj="off">Off</button>
-            <button data-proj="on">On</button>
-          </div>
-        </div>
       </div>
       <div class="chart-box"><canvas id="chart"></canvas></div>
     </section>
@@ -514,8 +508,6 @@ function main() {
     const originalDatasets = ${chartData};
     const familyLabels = ${familyLabels};
     const distributionSnapshots = ${distributionData};
-    const PROJECTION_MONTHS = 6;
-    const MOVING_AVG_WINDOW = 6;
     const DAY_MS = 24 * 60 * 60 * 1000;
     // A line segment spanning more than ~6 months without a round is not drawn:
     // it would show a trend across a stretch with no data.
@@ -549,11 +541,8 @@ function main() {
 
     function readURL() {
       const p = new URLSearchParams(window.location.search);
-      const proj = p.get('proj');
       return {
         range: ['1y', 'all'].includes(p.get('range')) ? p.get('range') : '3y',
-        // Older links used proj=linear|moving-avg|poly; any of them means "trend on"
-        proj: proj && proj !== 'off' ? 'on' : 'off',
         programs: p.get('programs') ? p.get('programs').split(',').filter(Boolean) : [],
         // Older links hid programs by position: ?hide=0,2
         hide: p.get('hide') ? p.get('hide').split(',').filter(Boolean) : [],
@@ -565,7 +554,6 @@ function main() {
     function writeURL() {
       const p = new URLSearchParams();
       if (timeRange !== '3y') p.set('range', timeRange);
-      if (projectionMode !== 'off') p.set('proj', 'on');
       if (selectedPrograms.size > 0) {
         p.set('programs', originalDatasets.filter(ds => selectedPrograms.has(ds.label)).map(ds => ds.slug).join(','));
       }
@@ -577,7 +565,6 @@ function main() {
     }
 
     const initState = readURL();
-    let projectionMode = initState.proj;
     let timeRange = initState.range;
     let userScore = initState.score ? parseInt(initState.score, 10) : 0;
     let currentTheme = initState.theme;
@@ -680,79 +667,6 @@ function main() {
       if (currentTheme === 'auto') applyTheme();
     });
 
-    // ========== Trend math ==========
-
-    // Linear regression: y = slope * x + intercept
-    function linearRegression(pts) {
-      const n = pts.length;
-      if (n < 2) return null;
-      let sx = 0, sy = 0, sxy = 0, sxx = 0;
-      for (const p of pts) { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; }
-      const d = n * sxx - sx * sx;
-      if (Math.abs(d) < 1e-10) return null;
-      const slope = (n * sxy - sx * sy) / d;
-      const intercept = (sy - slope * sx) / n;
-      return { eval: (x) => slope * x + intercept, slope, intercept };
-    }
-
-    // Trend = trailing moving average of the last MOVING_AVG_WINDOW rounds,
-    // continued PROJECTION_MONTHS ahead along the slope of its last 3 points.
-    function movingAvgProjection(filtered, dsLabel, dsColor) {
-      if (filtered.length < MOVING_AVG_WINDOW) return null;
-
-      const sorted = [...filtered].sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
-      const smoothed = [];
-      for (let i = MOVING_AVG_WINDOW - 1; i < sorted.length; i++) {
-        let sum = 0;
-        for (let j = i - MOVING_AVG_WINDOW + 1; j <= i; j++) sum += sorted[j].y;
-        smoothed.push({
-          x: sorted[i].x,
-          y: Math.round(sum / MOVING_AVG_WINDOW),
-          roundType: dsLabel + ' (trend)',
-          invitations: 0,
-          isProjection: true,
-        });
-      }
-
-      if (smoothed.length >= 2) {
-        const tail = smoothed.slice(-3);
-        const reg = linearRegression(tail.map(p => ({ x: new Date(p.x).getTime(), y: p.y })));
-        if (reg) {
-          const lastDate = new Date(smoothed[smoothed.length - 1].x);
-          const endDate = new Date(lastDate);
-          endDate.setMonth(endDate.getMonth() + PROJECTION_MONTHS);
-          const startT = lastDate.getTime(), endT = endDate.getTime();
-          for (let i = 1; i <= 12; i++) {
-            const t = startT + (endT - startT) * (i / 12);
-            smoothed.push({
-              x: new Date(t).toISOString().split('T')[0],
-              y: Math.max(0, Math.round(reg.eval(t))),
-              roundType: dsLabel + ' (forecast)',
-              invitations: 0,
-              isProjection: true,
-            });
-          }
-        }
-      }
-
-      return {
-        label: dsLabel + ' (ma)',
-        data: smoothed,
-        borderColor: dsColor,
-        backgroundColor: 'transparent',
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        borderWidth: 2.5,
-        borderDash: [2, 3],
-        tension: 0.3,
-        showLine: true,
-        segment: {
-          borderColor: (c) => (c.p1.parsed.x - c.p0.parsed.x > GAP_MS ? 'transparent' : undefined),
-        },
-        _isProjection: true,
-      };
-    }
-
     // ========== Dataset builder ==========
 
     function buildDatasets() {
@@ -765,12 +679,6 @@ function main() {
           : ds.data.slice();
 
         result.push({ ...ds, data: filtered });
-
-        // Trend lines only for main programs: in a shared-colour family several
-        // same-coloured trend lines would be indistinguishable.
-        if (projectionMode === 'off' || ds.family !== 'main' || filtered.length < 3) continue;
-        const proj = movingAvgProjection(filtered, ds.label, ds.borderColor);
-        if (proj) result.push(proj);
       }
 
       return result;
@@ -845,12 +753,10 @@ function main() {
             callbacks: {
               title: (items) => {
                 const d = items[0].raw;
-                if (d.isProjection) return d.roundType + ' — ' + fmtDate(d.x);
                 return 'Round #' + d.roundNumber + ' — ' + fmtDate(d.x);
               },
               label: (item) => {
                 const d = item.raw;
-                if (d.isProjection) return 'Trend CRS: ' + d.y;
                 return [
                   d.roundType,
                   'CRS cutoff: ' + d.y,
@@ -891,8 +797,7 @@ function main() {
     // Apply URL-restored program selection to the initial render
     if (selectedPrograms.size > 0) {
       chart.data.datasets.forEach((ds, i) => {
-        const base = ds.label.replace(/ \\((?:ma)\\)$/, '');
-        chart.getDatasetMeta(i).hidden = isHidden(base);
+        chart.getDatasetMeta(i).hidden = isHidden(ds.label);
       });
       chart.update('none');
     }
@@ -903,8 +808,7 @@ function main() {
       const ds = buildDatasets();
       chart.data.datasets = ds;
       ds.forEach((d, i) => {
-        const base = d.label.replace(/ \\((?:ma)\\)$/, '');
-        chart.getDatasetMeta(i).hidden = isHidden(base);
+        chart.getDatasetMeta(i).hidden = isHidden(d.label);
       });
       chart.update();
     }
@@ -929,9 +833,6 @@ function main() {
     document.querySelectorAll('#timeRange button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.range === timeRange);
     });
-    document.querySelectorAll('#projectionMode button').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.proj === projectionMode);
-    });
 
     document.querySelectorAll('#timeRange button').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -940,15 +841,6 @@ function main() {
         chart.options.scales.x.time = timeAxis();
         rebuildChart();
         onTimeRangeChanged();
-        writeURL();
-      });
-    });
-
-    document.querySelectorAll('#projectionMode button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        projectionMode = btn.dataset.proj;
-        document.querySelectorAll('#projectionMode button').forEach(b => b.classList.toggle('active', b === btn));
-        rebuildChart();
         writeURL();
       });
     });
