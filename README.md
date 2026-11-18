@@ -38,7 +38,15 @@ Open `dist/chart.html` in a browser.
 2. Go to Settings > Pages > Source > GitHub Actions.
 3. The included workflow handles the rest.
 
-Data refreshes automatically every Monday.
+Data refreshes automatically every day.
+
+### Beta preview
+
+Push work to the `beta` branch to preview it at `/beta/` on the same site
+(https://skfd.github.io/express_entry_score_stats/beta/) before it reaches `main`.
+The preview uses the same daily data, is not indexed by search engines and has no
+analytics. Each deploy of `main` rebuilds it, so it stays up until the `beta`
+branch is deleted.
 
 ## Data Source
 

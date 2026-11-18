@@ -59,6 +59,24 @@ jobs:
       - name: Generate visualization
         run: npm run generate
 
+      # Preview: the beta branch's generator, fed today's data, published at /beta/.
+      # Only main may deploy to Pages, so pushes to beta re-run this workflow on
+      # main (see beta.yml) instead of deploying themselves.
+      - name: Build beta preview
+        continue-on-error: true
+        run: |
+          if git ls-remote --exit-code --heads origin beta > /dev/null; then
+            git fetch --depth=1 origin beta
+            git worktree add ../beta-src FETCH_HEAD
+            cp src/data/rounds.json ../beta-src/src/data/rounds.json
+            (cd ../beta-src && npm ci && BETA=1 npm run generate)
+            mkdir -p dist/beta
+            cp -r ../beta-src/dist/. dist/beta/
+            echo "Beta preview built from $(git -C ../beta-src rev-parse --short HEAD)"
+          else
+            echo "No beta branch; skipping preview"
+          fi
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
