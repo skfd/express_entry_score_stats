@@ -278,6 +278,7 @@ function main() {
       --bad-text: #e66767;
       --link: #6ea8f0;
       --focus: #3987e5;
+      --bar: #3987e5;
     }
     .light {
       color-scheme: light;
@@ -294,6 +295,7 @@ function main() {
       --bad-text: #b42318;
       --link: #2a78d6;
       --focus: #2a78d6;
+      --bar: #2a78d6;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -351,6 +353,10 @@ function main() {
     .tile .rows { margin-top: 6px; display: grid; gap: 3px; font-size: 0.85rem; }
     .tile .rows div { display: flex; align-items: center; gap: 6px; }
     .tile .rows b { margin-left: auto; font-weight: 650; }
+    .tile .years { margin-top: 6px; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; font-size: 0.8rem; }
+    .tile .years .bar { height: 6px; border-radius: 3px; background: var(--bar); min-width: 2px; }
+    .tile .years b { font-weight: 650; text-align: right; }
+    .tile .years .now { color: var(--ink-2); }
 
     /* ---- Toolbar ---- */
     .chart-toolbar { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
@@ -416,6 +422,7 @@ function main() {
       border: 1px dashed var(--axis); border-radius: 8px; padding: 8px 12px;
     }
     .beta-banner a { color: var(--link); }
+    .footer-theme { justify-content: center; margin-top: 8px; }
     .footer { font-size: 0.75rem; color: var(--muted); text-align: center; }
     .footer a { color: var(--link); }
 
@@ -459,6 +466,7 @@ function main() {
       <div class="chart-toolbar">
         <div class="seg"><span class="seg-label">Range</span>
           <div class="toolbar-group" id="timeRange">
+            <button data-range="1y">Last year</button>
             <button class="active" data-range="3y">Last 3 years</button>
             <button data-range="all">All time</button>
           </div>
@@ -467,13 +475,6 @@ function main() {
           <div class="toolbar-group" id="projectionMode">
             <button class="active" data-proj="off">Off</button>
             <button data-proj="on">On</button>
-          </div>
-        </div>
-        <div class="seg"><span class="seg-label">Theme</span>
-          <div class="toolbar-group" id="themeToggle">
-            <button data-theme="auto" class="active">Auto</button>
-            <button data-theme="light">Light</button>
-            <button data-theme="dark">Dark</button>
           </div>
         </div>
       </div>
@@ -488,6 +489,13 @@ function main() {
       </div>
     </section>
 
+    <div class="footer-theme seg"><span class="seg-label">Theme</span>
+      <div class="toolbar-group" id="themeToggle">
+        <button data-theme="auto" class="active">Auto</button>
+        <button data-theme="light">Light</button>
+        <button data-theme="dark">Dark</button>
+      </div>
+    </div>
     <p class="footer">
     Contains information licensed under the <a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence &ndash; Canada</a>.
     Data source: <a href="${data.source}">IRCC Express Entry Rounds</a>
@@ -543,7 +551,7 @@ function main() {
       const p = new URLSearchParams(window.location.search);
       const proj = p.get('proj');
       return {
-        range: p.get('range') === 'all' ? 'all' : '3y',
+        range: ['1y', 'all'].includes(p.get('range')) ? p.get('range') : '3y',
         // Older links used proj=linear|moving-avg|poly; any of them means "trend on"
         proj: proj && proj !== 'off' ? 'on' : 'off',
         programs: p.get('programs') ? p.get('programs').split(',').filter(Boolean) : [],
@@ -588,16 +596,17 @@ function main() {
     const isHidden = (label) => selectedPrograms.size > 0 && !selectedPrograms.has(label);
 
     function rangeCutoff() {
-      if (timeRange !== '3y') return 0;
+      const years = { '1y': 1, '3y': 3 }[timeRange];
+      if (!years) return 0;
       const n = new Date();
-      return new Date(n.getFullYear() - 3, n.getMonth(), n.getDate()).getTime();
+      return new Date(n.getFullYear() - years, n.getMonth(), n.getDate()).getTime();
     }
 
-    // Yearly ticks for all time; quarterly for the last 3 years
+    // Monthly ticks for the last year, quarterly for 3 years, yearly for all time
     function timeAxis() {
-      return timeRange === '3y'
-        ? { unit: 'quarter', displayFormats: { quarter: 'MMM yyyy' }, tooltipFormat: 'PP' }
-        : { unit: 'year', displayFormats: { year: 'yyyy' }, tooltipFormat: 'PP' };
+      if (timeRange === '1y') return { unit: 'month', displayFormats: { month: 'MMM yyyy' }, tooltipFormat: 'PP' };
+      if (timeRange === '3y') return { unit: 'quarter', displayFormats: { quarter: 'MMM yyyy' }, tooltipFormat: 'PP' };
+      return { unit: 'year', displayFormats: { year: 'yyyy' }, tooltipFormat: 'PP' };
     }
 
     // ========== Theme management ==========
@@ -973,9 +982,20 @@ function main() {
       const days = Math.max(0, Math.round((today.getTime() - new Date(latest.x + 'T00:00:00').getTime()) / DAY_MS));
       const last30 = rounds.filter(r => latestT - new Date(r.x).getTime() < 30 * DAY_MS).length;
 
-      const year = new Date(latest.x).getUTCFullYear();
-      const thisYear = rounds.filter(r => r.x.slice(0, 4) === String(year));
-      const yearInv = thisYear.reduce((s, r) => s + (r.invitations || 0), 0);
+      // Invitations per calendar year, newest first; follows the program pick
+      const latestYear = latest.x.slice(0, 4);
+      const perYear = new Map();
+      rounds.forEach(r => {
+        if (isHidden(r.prog)) return;
+        const y = r.x.slice(0, 4);
+        perYear.set(y, (perYear.get(y) || 0) + (r.invitations || 0));
+      });
+      const years = [...perYear.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+      const maxInv = Math.max(1, ...years.map(([, v]) => v));
+      const yearRows = years.map(([y, v]) =>
+        '<span' + (y === latestYear ? ' class="now" title="So far this year"' : '') + '>' + y + (y === latestYear ? '*' : '') + '</span>' +
+        '<span class="bar" style="width:' + (100 * v / maxInv).toFixed(1) + '%"></span>' +
+        '<b>' + v.toLocaleString() + '</b>').join('');
 
       // Median cutoff per program over the 6 months before the latest round
       const recent = rounds.filter(r => latestT - new Date(r.x).getTime() <= 183 * DAY_MS);
@@ -998,8 +1018,9 @@ function main() {
           esc(latest.prog) + ' &middot; ' + fmtDate(latest.x) + ' &middot; ' + latest.invitations.toLocaleString() + ' invited') +
         tile('Since the last draw', days + (days === 1 ? ' day' : ' days'),
           last30 + ' round' + (last30 !== 1 ? 's' : '') + ' in the 30 days before it') +
-        tile('Invitations in ' + year, yearInv.toLocaleString(),
-          thisYear.length + ' round' + (thisYear.length !== 1 ? 's' : '') + ' so far') +
+        '<div class="tile"><div class="label">Invitations per year' + (selectedPrograms.size ? ', your programs' : '') +
+        ' <span title="' + latestYear + ' so far">(* so far)</span></div><div class="years">' +
+        (yearRows || '<span>No rounds</span>') + '</div></div>' +
         '<div class="tile"><div class="label">Median cutoff, last 6 months' + (selectedPrograms.size ? ', your programs' : '') +
         '</div><div class="rows">' + (progRows || '<div>No rounds in your programs</div>') + '</div></div>';
     }
