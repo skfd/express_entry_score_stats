@@ -521,10 +521,17 @@ function main() {
     // it would show a trend across a stretch with no data.
     const GAP_MS = 183 * DAY_MS;
 
+    // Smallest tap target, as a radius in CSS px: 48dp touch targets (Android; iOS asks for
+    // 44pt) on touch screens, a smaller one for a mouse. Where targets overlap, the
+    // circle whose centre is nearest the tap wins.
+    const MIN_TAP_RADIUS = window.matchMedia('(pointer: coarse)').matches ? 24 : 12;
+
     originalDatasets.forEach(ds => {
       // Circle area is proportional to invitations issued in the round
       ds.pointRadius = (c) => (c.raw && c.raw.r) || 3;
       ds.pointHoverRadius = (c) => ((c.raw && c.raw.r) || 3) + 3;
+      // Every circle answers taps across at least a finger-sized target, however small it is drawn
+      ds.pointHitRadius = (c) => Math.max(1, MIN_TAP_RADIUS - ((c.raw && c.raw.r) || 3));
       ds.segment = {
         borderColor: (c) => (c.p1.parsed.x - c.p0.parsed.x > GAP_MS ? 'transparent' : undefined),
       };
