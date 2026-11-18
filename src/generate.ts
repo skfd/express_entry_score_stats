@@ -8,6 +8,21 @@ const DATA_FILE = join(__dirname, "data", "rounds.json");
 const OUTPUT_DIR = join(__dirname, "..", "dist");
 const OUTPUT_FILE = join(OUTPUT_DIR, "index.html");
 
+/**
+ * Circle radius for a round, so the circle's area is proportional to the
+ * number of invitations issued. A 7,000-invitation round (about the 99th
+ * percentile) gets REF_RADIUS; the rare giant draws are capped so they don't
+ * swallow the chart, and tiny draws stay visible.
+ */
+const REF_INVITATIONS = 7000;
+const REF_RADIUS = 12;
+const MIN_RADIUS = 2;
+const MAX_RADIUS = 18;
+function radiusFor(invitations: number): number {
+  const r = REF_RADIUS * Math.sqrt(Math.max(0, invitations) / REF_INVITATIONS);
+  return Math.round(Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, r)) * 10) / 10;
+}
+
 /** Normalize round types into broader categories for charting */
 function categorize(roundType: string): string {
   const lower = roundType.toLowerCase();
@@ -113,11 +128,10 @@ function main() {
         invitations: r.invitationsIssued,
         roundNumber: r.number,
         roundType: r.roundType,
+        r: radiusFor(r.invitationsIssued),
       })),
       borderColor: color,
       backgroundColor: color + "33",
-      pointRadius: 3,
-      pointHoverRadius: 6,
       borderWidth: 1.5,
       tension: 0.1,
       showLine: true,
@@ -440,7 +454,7 @@ function main() {
 </head>
 <body>
   <h1>Canada Express Entry &mdash; CRS Score Trends</h1>
-  <p class="subtitle">Minimum CRS score required per invitation round, grouped by program type</p>
+  <p class="subtitle">Minimum CRS score required per invitation round, grouped by program type. Circle size shows how many invitations the round issued.</p>
 
   <div class="toolbar">
     <div class="toolbar-group" id="timeRange">
@@ -493,6 +507,11 @@ function main() {
 
   <script>
     const originalDatasets = ${chartData};
+    // Circle area is proportional to invitations issued in the round
+    originalDatasets.forEach(ds => {
+      ds.pointRadius = (c) => (c.raw && c.raw.r) || 3;
+      ds.pointHoverRadius = (c) => ((c.raw && c.raw.r) || 3) + 3;
+    });
     const distributionSnapshots = ${distributionData};
     const PROJECTION_MONTHS = 6;
     const MOVING_AVG_WINDOW = 6;
