@@ -118,6 +118,28 @@ const MAIN_COLORS: Record<string, readonly [string, string]> = {
   "Federal Skilled Workers": SLOT.magenta,
 };
 
+// Short, stable names for ?programs= links (unknown categories get a generated slug)
+const SLUGS: Record<string, string> = {
+  General: "general",
+  "Provincial Nominee": "pnp",
+  "Canadian Experience Class": "cec",
+  "French language": "french",
+  "Federal Skilled Trades": "fst",
+  "Federal Skilled Workers": "fsw",
+  Healthcare: "healthcare",
+  STEM: "stem",
+  Trades: "trades",
+  Transport: "transport",
+  Agriculture: "agriculture",
+  Education: "education",
+  Physicians: "physicians",
+  "Senior managers": "senior-managers",
+  "Military recruits": "military",
+};
+function slugFor(category: string): string {
+  return SLUGS[category] ?? category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 function familyOf(category: string): Family {
   if (MAIN_COLORS[category]) return "main";
   if (OCCUPATION_CATEGORIES.has(category)) return "occupation";
@@ -173,6 +195,7 @@ function main() {
         r: radiusFor(r.invitationsIssued),
       })),
       family,
+      slug: slugFor(cat),
       colorLight,
       colorDark,
       borderWidth: 1.5,
@@ -332,7 +355,7 @@ function main() {
     }
     .result .name { font-size: 0.8rem; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
     .result .big { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
-    .result .big small { font-size: 0.8rem; font-weight: 500; color: var(--ink-2); }
+    .result .big small { display: block; font-size: 0.8rem; font-weight: 500; color: var(--ink-2); }
     .result .sub { font-size: 0.75rem; color: var(--ink-2); margin-top: 2px; }
     .result .sub.good { color: var(--good-text); }
     .result .sub.bad { color: var(--bad-text); }
@@ -379,13 +402,16 @@ function main() {
     }
 
     /* ---- Legend chips ---- */
-    .legend { display: grid; gap: 6px; margin-bottom: 12px; }
+    .legend { display: grid; gap: 6px; }
     .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-    .legend-row .fam {
-      font-size: 0.75rem; color: var(--muted); min-width: 150px;
-      background: none; border: none; cursor: pointer; text-align: left; font-family: inherit; padding: 2px 0;
-    }
-    .legend-row .fam:hover { color: var(--ink); }
+    .legend-row .fam { font-size: 0.75rem; color: var(--muted); min-width: 150px; padding: 2px 0; }
+    .programs { margin-top: 18px; }
+    .programs-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .programs-title { font-size: 1rem; font-weight: 600; }
+    .programs-hint { font-size: 0.85rem; color: var(--ink-2); }
+    .link-btn { background: none; border: none; color: var(--link); cursor: pointer; font: inherit; font-size: 0.85rem; padding: 0; }
+    .chip.picked { border-color: var(--ink); font-weight: 600; }
+    .hero .chart-toolbar { margin-top: 24px; }
     .chip {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 3px 10px 3px 8px;
@@ -400,8 +426,6 @@ function main() {
     .chip:hover { background: var(--surface-raised); }
     .chip.off { color: var(--muted); }
     .chip.off .dot { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--muted); }
-    .legend-actions { font-size: 0.75rem; }
-    .legend-actions button { background: none; border: none; color: var(--link); cursor: pointer; font: inherit; padding: 0; }
 
     .chart-box { position: relative; }
     canvas { width: 100% !important; }
@@ -420,7 +444,6 @@ function main() {
       header h1 { font-size: 1.25rem; }
       .legend-row .fam { min-width: 0; width: 100%; }
       .results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .result .big small { display: block; }
       .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .tile .value { font-size: 1.25rem; }
     }
@@ -437,24 +460,29 @@ function main() {
       <p class="subtitle">The lowest CRS score invited in each round, by program. Bigger circles mean more invitations.</p>
     </header>
 
+    <section class="tiles" id="stats"></section>
+
     <section class="card hero">
       <div class="hero-top">
         <label for="scoreInput" class="hero-label">Your CRS score</label>
         <input type="number" id="scoreInput" min="0" max="1200" placeholder="480" inputmode="numeric" />
         <div id="poolPosition" class="pool-chips"></div>
       </div>
+      <div class="programs">
+        <div class="programs-head">
+          <span class="programs-title">Your programs</span>
+          <span class="programs-hint" id="programsHint"></span>
+          <button id="clearPrograms" class="link-btn">Clear</button>
+        </div>
+        <div class="legend" id="controls"></div>
+      </div>
       <p class="hint" id="scoreHint"></p>
       <div class="results" id="scoreResults"></div>
-    </section>
-
-    <section class="tiles" id="stats"></section>
-
-    <section class="card">
       <div class="chart-toolbar">
         <div class="seg"><span class="seg-label">Range</span>
           <div class="toolbar-group" id="timeRange">
-            <button class="active" data-range="all">All time</button>
-            <button data-range="3y">Last 3 years</button>
+            <button class="active" data-range="3y">Last 3 years</button>
+            <button data-range="all">All time</button>
           </div>
         </div>
         <div class="seg"><span class="seg-label">Trend</span>
@@ -471,7 +499,6 @@ function main() {
           </div>
         </div>
       </div>
-      <div class="legend" id="controls"></div>
       <div class="chart-box"><canvas id="chart"></canvas></div>
     </section>
 
@@ -538,9 +565,11 @@ function main() {
       const p = new URLSearchParams(window.location.search);
       const proj = p.get('proj');
       return {
-        range: p.get('range') || 'all',
+        range: p.get('range') === 'all' ? 'all' : '3y',
         // Older links used proj=linear|moving-avg|poly; any of them means "trend on"
         proj: proj && proj !== 'off' ? 'on' : 'off',
+        programs: p.get('programs') ? p.get('programs').split(',').filter(Boolean) : [],
+        // Older links hid programs by position: ?hide=0,2
         hide: p.get('hide') ? p.get('hide').split(',').filter(Boolean) : [],
         score: p.get('score') || '',
         theme: p.get('theme') || 'auto',
@@ -549,12 +578,10 @@ function main() {
 
     function writeURL() {
       const p = new URLSearchParams();
-      if (timeRange !== 'all') p.set('range', timeRange);
+      if (timeRange !== '3y') p.set('range', timeRange);
       if (projectionMode !== 'off') p.set('proj', 'on');
-      if (hiddenCategories.size > 0) {
-        const indices = [];
-        originalDatasets.forEach((ds, i) => { if (hiddenCategories.has(ds.label)) indices.push(i); });
-        p.set('hide', indices.join(','));
+      if (selectedPrograms.size > 0) {
+        p.set('programs', originalDatasets.filter(ds => selectedPrograms.has(ds.label)).map(ds => ds.slug).join(','));
       }
       if (userScore > 0) p.set('score', String(userScore));
       if (currentTheme !== 'auto') p.set('theme', currentTheme);
@@ -569,12 +596,18 @@ function main() {
     let userScore = initState.score ? parseInt(initState.score, 10) : 0;
     let currentTheme = initState.theme;
 
-    // Restore hidden categories from URL
-    const hiddenCategories = new Set();
-    initState.hide.forEach(idx => {
-      const i = parseInt(idx, 10);
-      if (originalDatasets[i]) hiddenCategories.add(originalDatasets[i].label);
+    // The reader's programs. Empty = nothing picked = show everything.
+    const selectedPrograms = new Set();
+    initState.programs.forEach(slug => {
+      const ds = originalDatasets.find(d => d.slug === slug);
+      if (ds) selectedPrograms.add(ds.label);
     });
+    if (!selectedPrograms.size && initState.hide.length) {
+      const hidden = new Set(initState.hide.map(i => parseInt(i, 10)));
+      originalDatasets.forEach((ds, i) => { if (!hidden.has(i)) selectedPrograms.add(ds.label); });
+      if (selectedPrograms.size === originalDatasets.length) selectedPrograms.clear();
+    }
+    const isHidden = (label) => selectedPrograms.size > 0 && !selectedPrograms.has(label);
 
     function rangeCutoff() {
       if (timeRange !== '3y') return 0;
@@ -756,7 +789,8 @@ function main() {
       return result;
     }
 
-    // ========== Legend chips (also the program filter) ==========
+    // ========== Your programs (also the chart legend) ==========
+    // First tap picks just that program; later taps add or remove. Clear = all.
 
     const controlsEl = document.getElementById('controls');
     const categoryButtons = [];
@@ -766,12 +800,10 @@ function main() {
       if (!idxs.length) return;
       const row = document.createElement('div');
       row.className = 'legend-row';
-      const famBtn = document.createElement('button');
-      famBtn.className = 'fam';
-      famBtn.textContent = familyLabels[fam];
-      famBtn.title = 'Show only ' + familyLabels[fam].toLowerCase() + ' (click again to show all)';
-      famBtn.onclick = () => soloFamily(fam);
-      row.appendChild(famBtn);
+      const famLabel = document.createElement('span');
+      famLabel.className = 'fam';
+      famLabel.textContent = familyLabels[fam];
+      row.appendChild(famLabel);
       idxs.forEach(i => {
         const ds = originalDatasets[i];
         const btn = document.createElement('button');
@@ -782,7 +814,7 @@ function main() {
         btn.appendChild(dot);
         btn.appendChild(document.createTextNode(ds.label));
         btn.title = ds.data.length + ' round' + (ds.data.length !== 1 ? 's' : '');
-        btn.onclick = () => toggleDataset(i);
+        btn.onclick = () => toggleProgram(i);
         row.appendChild(btn);
         categoryButtons[i] = btn;
         legendDots[i] = dot;
@@ -790,22 +822,22 @@ function main() {
       controlsEl.appendChild(row);
     });
 
-    const legendActions = document.createElement('div');
-    legendActions.className = 'legend-actions';
-    const showAllBtn = document.createElement('button');
-    showAllBtn.textContent = 'Show all programs';
-    showAllBtn.onclick = () => { hiddenCategories.clear(); afterLegendChange(); };
-    legendActions.appendChild(showAllBtn);
-    controlsEl.appendChild(legendActions);
+    const clearBtn = document.getElementById('clearPrograms');
+    const programsHintEl = document.getElementById('programsHint');
+    clearBtn.onclick = () => { selectedPrograms.clear(); afterLegendChange(); };
 
     function syncLegend() {
       categoryButtons.forEach((btn, i) => {
         if (!btn) return;
-        const off = hiddenCategories.has(originalDatasets[i].label);
-        btn.classList.toggle('off', off);
-        btn.setAttribute('aria-pressed', String(!off));
+        const label = originalDatasets[i].label;
+        btn.classList.toggle('picked', selectedPrograms.has(label));
+        btn.classList.toggle('off', isHidden(label));
+        btn.setAttribute('aria-pressed', String(selectedPrograms.has(label)));
       });
-      legendActions.style.visibility = hiddenCategories.size ? 'visible' : 'hidden';
+      clearBtn.style.display = selectedPrograms.size ? '' : 'none';
+      programsHintEl.textContent = selectedPrograms.size
+        ? 'Tap to add or remove.'
+        : 'Tap the ones you qualify for, to focus the cards and chart on them.';
     }
     syncLegend();
 
@@ -869,11 +901,11 @@ function main() {
     chart.canvas.parentNode.style.height = (window.innerWidth < 600 ? 420 : 520) + 'px';
     chart.resize();
 
-    // Apply URL-restored hidden state to the initial render
-    if (hiddenCategories.size > 0) {
+    // Apply URL-restored program selection to the initial render
+    if (selectedPrograms.size > 0) {
       chart.data.datasets.forEach((ds, i) => {
         const base = ds.label.replace(/ \\((?:ma)\\)$/, '');
-        chart.getDatasetMeta(i).hidden = hiddenCategories.has(base);
+        chart.getDatasetMeta(i).hidden = isHidden(base);
       });
       chart.update('none');
     }
@@ -885,7 +917,7 @@ function main() {
       chart.data.datasets = ds;
       ds.forEach((d, i) => {
         const base = d.label.replace(/ \\((?:ma)\\)$/, '');
-        chart.getDatasetMeta(i).hidden = hiddenCategories.has(base);
+        chart.getDatasetMeta(i).hidden = isHidden(base);
       });
       chart.update();
       if (userScore > 0) buildScoreResults(userScore);
@@ -893,24 +925,15 @@ function main() {
 
     function afterLegendChange() {
       syncLegend();
+      updateStats();
       rebuildChart();
       writeURL();
     }
 
-    function toggleDataset(origIdx) {
+    function toggleProgram(origIdx) {
       const label = originalDatasets[origIdx].label;
-      if (hiddenCategories.has(label)) hiddenCategories.delete(label);
-      else hiddenCategories.add(label);
-      afterLegendChange();
-    }
-
-    // Show only one family; clicking the same family again shows everything
-    function soloFamily(fam) {
-      const outside = originalDatasets.filter(ds => ds.family !== fam).map(ds => ds.label);
-      const alreadySolo = outside.every(l => hiddenCategories.has(l)) &&
-        originalDatasets.every(ds => ds.family !== fam || !hiddenCategories.has(ds.label));
-      hiddenCategories.clear();
-      if (!alreadySolo) outside.forEach(l => hiddenCategories.add(l));
+      if (selectedPrograms.has(label)) selectedPrograms.delete(label);
+      else selectedPrograms.add(label);
       afterLegendChange();
     }
 
@@ -981,6 +1004,7 @@ function main() {
       const recent = rounds.filter(r => latestT - new Date(r.x).getTime() <= 183 * DAY_MS);
       const byProg = new Map();
       recent.forEach(r => {
+        if (isHidden(originalDatasets[r.idx].label)) return;
         if (!byProg.has(r.idx)) byProg.set(r.idx, []);
         byProg.get(r.idx).push(r.y);
       });
@@ -999,7 +1023,8 @@ function main() {
           last30 + ' round' + (last30 !== 1 ? 's' : '') + ' in the 30 days before it') +
         tile('Invitations in ' + year, yearInv.toLocaleString(),
           thisYear.length + ' round' + (thisYear.length !== 1 ? 's' : '') + ' so far') +
-        '<div class="tile"><div class="label">Median cutoff, last 6 months</div><div class="rows">' + progRows + '</div></div>';
+        '<div class="tile"><div class="label">Median cutoff, last 6 months' + (selectedPrograms.size ? ', your programs' : '') +
+        '</div><div class="rows">' + (progRows || '<div>No rounds in your programs</div>') + '</div></div>';
     }
 
     function tile(label, value, sub) {
@@ -1076,10 +1101,10 @@ function main() {
       let shown = 0;
 
       originalDatasets.forEach(ds => {
-        if (hiddenCategories.has(ds.label) || !ds.data.length) return;
+        if (isHidden(ds.label) || !ds.data.length) return;
         const sorted = [...ds.data].sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
         const last = sorted[sorted.length - 1];
-        if (latestT - new Date(last.x).getTime() > 365 * DAY_MS) return;
+        if (!selectedPrograms.size && latestT - new Date(last.x).getTime() > 365 * DAY_MS) return;
 
         const lastN = sorted.slice(-10);
         const met = lastN.filter(d => d.y <= score).length;
@@ -1107,9 +1132,9 @@ function main() {
         shown++;
       });
 
-      scoreHintEl.textContent = shown
-        ? 'Programs that held a round in the past 12 months. A cutoff is met when your score is at or above it.'
-        : 'None of the programs shown held a round in the past 12 months.';
+      scoreHintEl.textContent = selectedPrograms.size
+        ? 'Your programs. A cutoff is met when your score is at or above it.'
+        : 'Programs that held a round in the past 12 months. A cutoff is met when your score is at or above it.';
     }
 
     // ========== Pool-aware projection helpers ==========
