@@ -8,6 +8,9 @@ const DATA_FILE = join(__dirname, "data", "rounds.json");
 const OUTPUT_DIR = join(__dirname, "..", "dist");
 const OUTPUT_FILE = join(OUTPUT_DIR, "index.html");
 
+/** BETA=1 builds the /beta/ preview: banner, not indexed, no analytics. */
+const BETA = process.env.BETA === "1";
+
 /**
  * Circle radius for a round, so the circle's area is proportional to the
  * number of invitations issued. A 7,000-invitation round (about the 99th
@@ -231,7 +234,7 @@ function main() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Canada Express Entry - CRS Score Trends</title>
+  <title>${BETA ? "[Beta] " : ""}Canada Express Entry - CRS Score Trends</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23f59e0b' d='M32 4L29 12l-4-2 2 7-8-4 2 6H14l5 5-7 3 8 3-3 7 6-3 1 7 4-5 2 8h4l2-8 4 5 1-7 6 3-3-7 8-3-7-3 5-5h-7l2-6-8 4 2-7-4 2z'/%3E%3Crect fill='%23f59e0b' x='29' y='46' width='6' height='14' rx='1'/%3E%3C/svg%3E" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
@@ -403,6 +406,11 @@ function main() {
     .chart-box { position: relative; }
     canvas { width: 100% !important; }
 
+    .beta-banner {
+      font-size: 0.85rem; color: var(--ink); background: var(--surface);
+      border: 1px dashed var(--axis); border-radius: 8px; padding: 8px 12px;
+    }
+    .beta-banner a { color: var(--link); }
     .footer { font-size: 0.75rem; color: var(--muted); text-align: center; }
     .footer a { color: var(--link); }
 
@@ -417,10 +425,13 @@ function main() {
       .tile .value { font-size: 1.25rem; }
     }
   </style>
-  <script data-goatcounter="https://express-entry-score-stats.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  ${BETA
+    ? '<meta name="robots" content="noindex, nofollow">'
+    : '<script data-goatcounter="https://express-entry-score-stats.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>'}
 </head>
 <body>
   <main class="page">
+    ${BETA ? '<p class="beta-banner"><b>Beta preview.</b> Not the live site, which is <a href="../">here</a>.</p>' : ""}
     <header>
       <h1>Canada Express Entry &mdash; CRS cutoffs</h1>
       <p class="subtitle">The lowest CRS score invited in each round, by program. Bigger circles mean more invitations.</p>
