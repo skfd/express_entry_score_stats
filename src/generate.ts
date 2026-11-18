@@ -768,36 +768,50 @@ function main() {
     // A circle straddling the dashed line hides which side of it the cutoff is on.
     // Circles that touch the line are pushed clear of it: a cutoff above your score
     // goes above, one at or below it (you would have been invited) goes below.
-    // Only the drawn and tapped position moves, and it is put back straight after,
-    // so tooltips keep the real cutoff and animations never see the nudge.
+    // Only the circle moves: the program's line still runs through the real
+    // cutoffs, and tooltips show them.
     const REPEL_GAP = 2;
-    let repelDepth = 0;
-    function nudgeOffScoreLine(c, apply) {
-      if (apply ? repelDepth++ > 0 : --repelDepth > 0) return;
+
+    // Work out each circle's nudge from its real position; nothing moves yet
+    function measureRepel(c) {
+      const lineY = userScore > 0 ? c.scales.y.getPixelForValue(userScore) : null;
       c.data.datasets.forEach((ds, di) => {
-        const meta = c.getDatasetMeta(di);
-        meta.data.forEach((el, j) => {
-          // The line's curve control points move with the point, or the line spikes
-          const shift = (d) => { el.y += d; if (el.cp1y != null) { el.cp1y += d; el.cp2y += d; } };
-          if (!apply) { if (el.$repel) { shift(-el.$repel); el.$repel = 0; } return; }
+        const visible = c.isDatasetVisible(di);
+        c.getDatasetMeta(di).data.forEach((el, j) => {
           el.$repel = 0;
-          if (!(userScore > 0) || !c.isDatasetVisible(di) || !ds.data[j]) return;
-          const lineY = c.scales.y.getPixelForValue(userScore);
+          if (lineY == null || !visible || !ds.data[j]) return;
           const o = el.options || {};
           const r = (o.radius || 3) + (o.borderWidth || 0) / 2 + REPEL_GAP;
           // Only circles overlapping the line; one mid-animation far away is left alone
           if (Math.abs(el.y - lineY) >= r) return;
-          const target = ds.data[j].y > userScore ? lineY - r : lineY + r;
-          el.$repel = target - el.y;
-          shift(el.$repel);
+          el.$repel = (ds.data[j].y > userScore ? lineY - r : lineY + r) - el.y;
+        });
+      });
+    }
+
+    // Circles draw at the nudged spot; the line between them reads el.y untouched
+    const PointEl = Chart.PointElement || Chart.registry.getElement('point');
+    const drawPoint = PointEl.prototype.draw;
+    PointEl.prototype.draw = function(ctx, area) {
+      const d = this.$shifted ? 0 : (this.$repel || 0);
+      this.y += d;
+      drawPoint.call(this, ctx, area);
+      this.y -= d;
+    };
+
+    // Hover and tap hit-test against the nudged circles: shift them for the event only
+    function nudgeOffScoreLine(c, apply) {
+      if (apply) measureRepel(c);
+      c.data.datasets.forEach((ds, di) => {
+        c.getDatasetMeta(di).data.forEach((el) => {
+          if (apply && el.$repel && !el.$shifted) { el.y += el.$repel; el.$shifted = true; }
+          else if (!apply && el.$shifted) { el.y -= el.$repel; el.$shifted = false; }
         });
       });
     }
     const repelPlugin = {
       id: 'repelFromScore',
-      beforeDatasetsDraw: (c) => nudgeOffScoreLine(c, true),
-      afterDatasetsDraw: (c) => nudgeOffScoreLine(c, false),
-      // Hover and tap hit-test against the nudged positions too
+      beforeDatasetsDraw: (c) => measureRepel(c),
       beforeEvent: (c) => nudgeOffScoreLine(c, true),
       afterEvent: (c) => nudgeOffScoreLine(c, false),
     };
