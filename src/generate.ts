@@ -816,6 +816,89 @@ function main() {
       afterEvent: (c) => nudgeOffScoreLine(c, false),
     };
 
+    // ========== Tooltip placement that keeps the tapped program in view ==========
+    // Try above, below, the four corners, right and left of the circle; take the first spot
+    // that covers none of the tapped program's circles and line. Other programs
+    // only break ties, and spilling off the chart is a last resort.
+    const TIP_PAD = 12, TIP_CARET = 7, TIP_LINE = 14.4, TIP_CORNER = 8;
+
+    function tipSize(c, items) {
+      const g = c.ctx;
+      const fam = Chart.defaults.font.family;
+      let w = 0;
+      g.save();
+      items.forEach(it => {
+        const d = it.element.$context ? it.element.$context.raw : c.data.datasets[it.datasetIndex].data[it.index];
+        if (!d) return;
+        g.font = 'bold 12px ' + fam;
+        w = Math.max(w, g.measureText('Round #' + d.roundNumber + ' — ' + fmtDate(d.x)).width);
+        g.font = '12px ' + fam;
+        [d.roundType, 'CRS cutoff: ' + d.y, 'Invitations: ' + d.invitations.toLocaleString()]
+          .forEach(l => { w = Math.max(w, g.measureText(l).width + 16); });
+      });
+      g.restore();
+      // title + gap + three lines per item, with body spacing
+      const h = TIP_PAD * 2 + TIP_LINE + 6 + items.length * (3 * TIP_LINE + 3 * 2);
+      return { w: w + TIP_PAD * 2 + 4, h };
+    }
+
+    // Where each circle is drawn and where its line runs (the two differ near the score line)
+    const drawnY = (el) => el.$shifted ? el.y : el.y + (el.$repel || 0);
+    const lineYOf = (el) => el.$shifted ? el.y - el.$repel : el.y;
+
+    function coverage(c, rect, tappedDs) {
+      let hits = 0;
+      const inRect = (x, y, pad) => x > rect.x - pad && x < rect.x + rect.w + pad && y > rect.y - pad && y < rect.y + rect.h + pad;
+      c.data.datasets.forEach((ds, di) => {
+        if (!c.isDatasetVisible(di)) return;
+        // The tapped program always wins; other programs only break ties
+        const weight = di === tappedDs ? 1000 : 1;
+        const pts = c.getDatasetMeta(di).data;
+        pts.forEach((el, j) => {
+          if (inRect(el.x, drawnY(el), (el.options && el.options.radius) || 3)) hits += weight;
+          const prev = pts[j - 1];
+          if (!ds.showLine || !prev || ds.data[j] && ds.data[j - 1] &&
+            new Date(ds.data[j].x) - new Date(ds.data[j - 1].x) > GAP_MS) return;
+          for (let k = 1; k < 8; k++) {
+            const t = k / 8;
+            if (inRect(prev.x + (el.x - prev.x) * t, lineYOf(prev) + (lineYOf(el) - lineYOf(prev)) * t, 1)) hits += weight / 4;
+          }
+        });
+      });
+      return hits;
+    }
+
+    Chart.Tooltip.positioners.avoidSeries = function(items) {
+      if (!items.length) return false;
+      const c = this.chart;
+      const el = items[0].element;
+      const px = el.x, py = el.y;
+      const r = ((el.options && el.options.radius) || 3) + 2;
+      const { w, h } = tipSize(c, items);
+      const W = c.width, H = c.height;
+      const clampX = (x) => Math.min(Math.max(x, 0), W - w);
+      const clampY = (y) => Math.min(Math.max(y, 0), H - h);
+      const spots = [
+        { x: px, y: py - r, xAlign: 'center', yAlign: 'bottom', rx: clampX(px - w / 2), ry: py - r - TIP_CARET - h },
+        { x: px, y: py + r, xAlign: 'center', yAlign: 'top', rx: clampX(px - w / 2), ry: py + r + TIP_CARET },
+        // Corners: the caret sits near the box's corner, so the box hangs off to one side
+        { x: px, y: py - r, xAlign: 'left', yAlign: 'bottom', rx: px - TIP_CORNER, ry: py - r - TIP_CARET - h },
+        { x: px, y: py - r, xAlign: 'right', yAlign: 'bottom', rx: px - w + TIP_CORNER, ry: py - r - TIP_CARET - h },
+        { x: px, y: py + r, xAlign: 'left', yAlign: 'top', rx: px - TIP_CORNER, ry: py + r + TIP_CARET },
+        { x: px, y: py + r, xAlign: 'right', yAlign: 'top', rx: px - w + TIP_CORNER, ry: py + r + TIP_CARET },
+        { x: px + r, y: py, xAlign: 'left', yAlign: 'center', rx: px + r + TIP_CARET, ry: clampY(py - h / 2) },
+        { x: px - r, y: py, xAlign: 'right', yAlign: 'center', rx: px - r - TIP_CARET - w, ry: clampY(py - h / 2) },
+      ];
+      let best = null;
+      spots.forEach(s => {
+        const off = s.rx < 0 || s.ry < 0 || s.rx + w > W || s.ry + h > H;
+        const rect = { x: Math.min(Math.max(s.rx, 0), W - w), y: Math.min(Math.max(s.ry, 0), H - h), w, h };
+        s.score = (off ? 1e7 : 0) + coverage(c, rect, items[0].datasetIndex);
+        if (!best || s.score < best.score) best = s;
+      });
+      return { x: best.x, y: best.y, xAlign: best.xAlign, yAlign: best.yAlign };
+    };
+
     const ctx = document.getElementById('chart').getContext('2d');
     const chart = new Chart(ctx, {
       type: 'scatter',
@@ -829,6 +912,7 @@ function main() {
           annotation: { annotations: {} },
           legend: { display: false },
           tooltip: {
+            position: 'avoidSeries',
             callbacks: {
               title: (items) => {
                 const d = items[0].raw;
