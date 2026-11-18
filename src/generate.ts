@@ -30,7 +30,12 @@ function categorize(roundType: string): string {
   if (lower.includes("no program specified") || lower === "general")
     return "General";
 
-  if (lower.includes("provincial nominee")) return "Provincial Nominee Program";
+  if (lower.includes("provincial nominee")) return "Provincial Nominee";
+
+  // 2026 categories that mention "Canadian Work Experience" — match before CEC
+  if (lower.includes("physician")) return "Physicians";
+  if (lower.includes("senior manager")) return "Senior managers";
+  if (lower.includes("military")) return "Military recruits";
 
   if (lower.includes("canadian experience"))
     return "Canadian Experience Class";
@@ -41,54 +46,85 @@ function categorize(roundType: string): string {
   if (lower.includes("federal skilled trades"))
     return "Federal Skilled Trades";
 
-  if (lower.includes("french")) return "French Language Proficiency";
+  if (lower.includes("french")) return "French language";
 
   if (lower.includes("healthcare") || lower.includes("health care"))
-    return "Healthcare Occupations";
+    return "Healthcare";
 
-  if (lower.includes("stem")) return "STEM Occupations";
+  if (lower.includes("stem")) return "STEM";
 
-  if (lower.includes("trade")) return "Trade Occupations";
+  if (lower.includes("trade")) return "Trades";
 
-  if (lower.includes("transport")) return "Transport Occupations";
+  if (lower.includes("transport")) return "Transport";
 
   if (lower.includes("agriculture") || lower.includes("agri-food"))
-    return "Agriculture & Agri-food";
+    return "Agriculture";
 
-  if (lower.includes("education")) return "Education Occupations";
+  if (lower.includes("education")) return "Education";
 
-  // Keep original if no match
+  // Keep original if no match; it lands in the "new" family below
   return roundType;
 }
 
-const COLORS: Record<string, string> = {
-  General: "#2563eb",
-  "Provincial Nominee Program": "#dc2626",
-  "Canadian Experience Class": "#16a34a",
-  "Federal Skilled Workers": "#9333ea",
-  "Federal Skilled Trades": "#ea580c",
-  "French Language Proficiency": "#0891b2",
-  "Healthcare Occupations": "#e11d48",
-  "STEM Occupations": "#4f46e5",
-  "Trade Occupations": "#b45309",
-  "Transport Occupations": "#6d28d9",
-  "Agriculture & Agri-food": "#15803d",
-  "Education Occupations": "#d97706",
+/**
+ * Programs are grouped into three families. Main programs each get their own
+ * hue; every occupation category shares one hue, and every newer category
+ * (including any round type that appears later and isn't matched above)
+ * shares another. That keeps the chart to 8 colours however many categories
+ * IRCC adds.
+ */
+type Family = "main" | "occupation" | "new";
+const FAMILY_LABELS: Record<Family, string> = {
+  main: "Main programs",
+  occupation: "Occupation categories",
+  new: "Newer categories",
+};
+const FAMILY_ORDER: Family[] = ["main", "occupation", "new"];
+
+const OCCUPATION_CATEGORIES = new Set([
+  "Healthcare",
+  "STEM",
+  "Trades",
+  "Transport",
+  "Agriculture",
+  "Education",
+]);
+
+// Slots from the validated reference palette (light / dark steps).
+// Hue choice by overlap: the four series that share the 2023–2026 band get
+// orange / aqua / violet / yellow, the most mutually separable set; the
+// weakest pair (orange–yellow) goes to CEC vs the 2026 categories, which sit
+// far apart in score. PNP sits alone at 650–900, so red is safe there.
+const SLOT = {
+  blue: ["#2a78d6", "#3987e5"],
+  orange: ["#eb6834", "#d95926"],
+  aqua: ["#1baf7a", "#199e70"],
+  yellow: ["#eda100", "#c98500"],
+  magenta: ["#e87ba4", "#d55181"],
+  green: ["#008300", "#0ca30c"],
+  violet: ["#6250d6", "#9085e9"],
+  red: ["#e34948", "#e66767"],
+} as const;
+
+const MAIN_COLORS: Record<string, readonly [string, string]> = {
+  General: SLOT.blue,
+  "Canadian Experience Class": SLOT.orange,
+  "French language": SLOT.aqua,
+  "Provincial Nominee": SLOT.red,
+  "Federal Skilled Trades": SLOT.green,
+  "Federal Skilled Workers": SLOT.magenta,
 };
 
-function getColor(category: string, index: number): string {
-  if (COLORS[category]) return COLORS[category];
-  const fallback = [
-    "#f59e0b",
-    "#8b5cf6",
-    "#ec4899",
-    "#06b6d4",
-    "#84cc16",
-    "#f97316",
-    "#14b8a6",
-    "#a855f7",
-  ];
-  return fallback[index % fallback.length];
+function familyOf(category: string): Family {
+  if (MAIN_COLORS[category]) return "main";
+  if (OCCUPATION_CATEGORIES.has(category)) return "occupation";
+  return "new";
+}
+
+function colorsFor(category: string): readonly [string, string] {
+  const fam = familyOf(category);
+  if (fam === "main") return MAIN_COLORS[category];
+  return fam === "occupation" ? SLOT.violet : SLOT.yellow;
 }
 
 function main() {
@@ -104,9 +140,11 @@ function main() {
     grouped.get(cat)!.push(round);
   }
 
-  // Sort categories by count (descending) for legend order
+  // Legend order: by family, then by round count (descending)
   const categories = [...grouped.entries()].sort(
-    (a, b) => b[1].length - a[1].length
+    (a, b) =>
+      FAMILY_ORDER.indexOf(familyOf(a[0])) - FAMILY_ORDER.indexOf(familyOf(b[0])) ||
+      b[1].length - a[1].length
   );
 
   console.log(`\nCategories:`);
@@ -115,8 +153,9 @@ function main() {
   }
 
   // Build Chart.js datasets
-  const datasets = categories.map(([cat, rounds], idx) => {
-    const color = getColor(cat, idx);
+  const datasets = categories.map(([cat, rounds]) => {
+    const [colorLight, colorDark] = colorsFor(cat);
+    const family = familyOf(cat);
     const sortedRounds = [...rounds].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
@@ -130,13 +169,17 @@ function main() {
         roundType: r.roundType,
         r: radiusFor(r.invitationsIssued),
       })),
-      borderColor: color,
-      backgroundColor: color + "33",
+      family,
+      colorLight,
+      colorDark,
       borderWidth: 1.5,
       tension: 0.1,
-      showLine: true,
+      // Programs that share a family colour get points only: same-coloured
+      // lines from different programs would read as one series.
+      showLine: family === "main",
     };
   });
+  const familyLabels = JSON.stringify(FAMILY_LABELS);
 
   const chartData = JSON.stringify(datasets);
 
@@ -195,304 +238,241 @@ function main() {
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
   <style>
     :root {
-      --bg: #0f172a;
-      --bg-card: #1e293b;
-      --bg-hover: #334155;
-      --border: #334155;
-      --text: #e2e8f0;
-      --text-heading: #f1f5f9;
-      --text-muted: #94a3b8;
-      --text-faint: #64748b;
-      --text-input: #f8fafc;
-      --text-placeholder: #475569;
-      --grid-line: #1e293b;
-      --grid-line-y: #334155;
-      --tooltip-bg: #1e293b;
-      --tooltip-title: #f1f5f9;
-      --tooltip-body: #cbd5e1;
-      --tooltip-border: #334155;
-      --link: #60a5fa;
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --surface-raised: #2c2c2a;
+      --ink: #f0efec;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --hairline: rgba(255, 255, 255, 0.10);
+      --good-text: #0ca30c;
+      --bad-text: #e66767;
+      --link: #6ea8f0;
+      --focus: #3987e5;
     }
     .light {
-      --bg: #f8fafc;
-      --bg-card: #ffffff;
-      --bg-hover: #e2e8f0;
-      --border: #cbd5e1;
-      --text: #1e293b;
-      --text-heading: #0f172a;
-      --text-muted: #64748b;
-      --text-faint: #94a3b8;
-      --text-input: #0f172a;
-      --text-placeholder: #94a3b8;
-      --grid-line: #e2e8f0;
-      --grid-line-y: #cbd5e1;
-      --tooltip-bg: #ffffff;
-      --tooltip-title: #0f172a;
-      --tooltip-body: #334155;
-      --tooltip-border: #e2e8f0;
-      --link: #2563eb;
+      color-scheme: light;
+      --page: #f9f9f7;
+      --surface: #fcfcfb;
+      --surface-raised: #ffffff;
+      --ink: #0b0b0b;
+      --ink-2: #52514e;
+      --muted: #898781;
+      --grid: #e1e0d9;
+      --axis: #c3c2b7;
+      --hairline: rgba(11, 11, 11, 0.10);
+      --good-text: #006300;
+      --bad-text: #b42318;
+      --link: #2a78d6;
+      --focus: #2a78d6;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 20px;
-      transition: background 0.2s, color 0.2s;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: var(--page);
+      color: var(--ink);
+      padding: 24px 20px 32px;
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
     }
-    h1 {
-      text-align: center;
-      margin-bottom: 4px;
-      font-size: 1.5rem;
-      color: var(--text-heading);
-    }
-    .subtitle {
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-    .chart-container {
-      position: relative;
-      max-width: 1400px;
-      margin: 0 auto;
-      background: var(--bg-card);
+    .page { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; }
+    .subtitle { font-size: 0.875rem; color: var(--ink-2); margin-top: 4px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
       border-radius: 12px;
       padding: 20px;
     }
-    canvas { width: 100% !important; }
-    .toolbar {
-      max-width: 1400px;
-      margin: 0 auto 12px;
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-      flex-wrap: wrap;
+    h2 { font-size: 1.1rem; font-weight: 650; }
+
+    /* ---- Score hero ---- */
+    .hero-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .hero-label { font-size: 1rem; font-weight: 600; }
+    .hero input {
+      width: 120px;
+      padding: 8px 12px;
+      border: 1px solid var(--axis);
+      border-radius: 10px;
+      background: var(--surface-raised);
+      color: var(--ink);
+      font: inherit;
+      font-size: 1.75rem;
+      font-weight: 700;
+      text-align: center;
+      outline: none;
+      -moz-appearance: textfield;
     }
-    .toolbar-group {
-      display: flex;
-      gap: 4px;
-      background: var(--bg-card);
+    .hero input::-webkit-outer-spin-button,
+    .hero input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .hero input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent); }
+    .hero input::placeholder { color: var(--muted); font-weight: 400; }
+    .pool-chips { display: flex; gap: 24px; flex-wrap: wrap; }
+    .pool-chip .chip-label { font-size: 0.75rem; color: var(--muted); }
+    .pool-chip .chip-val { font-size: 1.1rem; font-weight: 650; }
+    .hint { font-size: 0.875rem; color: var(--ink-2); margin-top: 12px; }
+    .results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .results:empty { display: none; }
+    .result {
+      border: 1px solid var(--hairline);
       border-radius: 8px;
-      padding: 4px;
+      padding: 10px 12px;
+      background: var(--surface-raised);
+    }
+    .result .name { font-size: 0.8rem; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+    .result .big { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+    .result .big small { font-size: 0.8rem; font-weight: 500; color: var(--ink-2); }
+    .result .sub { font-size: 0.75rem; color: var(--ink-2); margin-top: 2px; }
+    .result .sub.good { color: var(--good-text); }
+    .result .sub.bad { color: var(--bad-text); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+
+    /* ---- Latest-draw tiles ---- */
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .tile { background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px; padding: 14px 16px; }
+    .tile .label { font-size: 0.75rem; color: var(--muted); }
+    .tile .value { font-size: 1.5rem; font-weight: 700; margin-top: 2px; }
+    .tile .sub { font-size: 0.8rem; color: var(--ink-2); margin-top: 2px; }
+    .tile .rows { margin-top: 6px; display: grid; gap: 3px; font-size: 0.85rem; }
+    .tile .rows div { display: flex; align-items: center; gap: 6px; }
+    .tile .rows b { margin-left: auto; font-weight: 650; }
+
+    /* ---- Toolbar ---- */
+    .chart-toolbar { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .seg-label { font-size: 0.75rem; color: var(--muted); margin-right: 6px; }
+    .seg { display: inline-flex; align-items: center; }
+    .toolbar-group {
+      display: inline-flex;
+      gap: 2px;
+      background: var(--page);
+      border: 1px solid var(--hairline);
+      border-radius: 8px;
+      padding: 2px;
     }
     .toolbar-group button {
-      padding: 6px 16px;
+      padding: 4px 12px;
       border: none;
       border-radius: 6px;
       background: transparent;
-      color: var(--text-muted);
+      color: var(--ink-2);
       cursor: pointer;
+      font: inherit;
       font-size: 0.8rem;
-      font-weight: 500;
-      transition: all 0.15s;
     }
-    .toolbar-group button:hover { background: var(--bg-hover); color: var(--text); }
+    .toolbar-group button:hover { color: var(--ink); }
     .toolbar-group button.active {
-      background: #3b82f6;
-      color: white;
-    }
-    .toolbar-group button.active.projection-on {
-      background: #8b5cf6;
-      color: white;
-    }
-    .controls {
-      max-width: 1400px;
-      margin: 0 auto 16px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: center;
-    }
-    .controls button {
-      padding: 6px 14px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg-card);
-      color: var(--text);
-      cursor: pointer;
-      font-size: 0.8rem;
-      transition: all 0.15s;
-    }
-    .controls button:hover { background: var(--bg-hover); }
-    .controls button.active {
-      background: #3b82f6;
-      border-color: #3b82f6;
-      color: white;
-    }
-    .stats {
-      max-width: 1400px;
-      margin: 20px auto 0;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-    }
-    .stat-card {
-      background: var(--bg-card);
-      border-radius: 8px;
-      padding: 14px;
-    }
-    .stat-card h3 {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-    .stat-card .value {
-      font-size: 1.3rem;
-      font-weight: 700;
-    }
-    .score-bar {
-      max-width: 1400px;
-      margin: 0 auto 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .score-bar label {
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      font-weight: 500;
-      white-space: nowrap;
-    }
-    .score-bar input {
-      width: 100px;
-      padding: 8px 12px;
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg-card);
-      color: var(--text-input);
-      font-size: 1.4rem;
-      font-weight: 700;
-      text-align: center;
-      letter-spacing: 0.08em;
-      outline: none;
-      transition: border-color 0.2s;
-      -moz-appearance: textfield;
-    }
-    .score-bar input::-webkit-outer-spin-button,
-    .score-bar input::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    .score-bar input:focus {
-      border-color: #f59e0b;
-    }
-    .score-bar input::placeholder {
-      color: var(--text-placeholder);
-      font-weight: 400;
-      font-size: 0.9rem;
-    }
-    .score-cards {
-      display: contents;
-    }
-    .score-result-card {
-      background: var(--bg-card);
-      border-radius: 8px;
-      padding: 8px 14px;
-      border-left: 3px solid var(--border);
-    }
-    .score-result-card .cat-name {
-      font-size: 0.65rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      margin-bottom: 1px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 180px;
-    }
-    .score-result-card .result-text {
-      font-size: 0.8rem;
+      background: var(--surface-raised);
+      color: var(--ink);
       font-weight: 600;
-      white-space: nowrap;
+      box-shadow: 0 0 0 1px var(--hairline), 0 1px 2px rgba(0, 0, 0, 0.12);
     }
-    .score-result-card .result-text.eligible { color: #16a34a; }
-    .score-result-card .result-text.projected { color: #d97706; }
-    .score-result-card .result-text.unlikely { color: #dc2626; }
-    .section-heading {
-      text-align: center;
-      margin-top: 32px;
-      margin-bottom: 4px;
-      font-size: 1.3rem;
-      color: var(--text-heading);
+
+    /* ---- Legend chips ---- */
+    .legend { display: grid; gap: 6px; margin-bottom: 12px; }
+    .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+    .legend-row .fam {
+      font-size: 0.75rem; color: var(--muted); min-width: 150px;
+      background: none; border: none; cursor: pointer; text-align: left; font-family: inherit; padding: 2px 0;
     }
-    .pool-position-inline {
-      display: contents;
+    .legend-row .fam:hover { color: var(--ink); }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px 3px 8px;
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
     }
-    .pool-chip {
-      background: var(--bg-card);
-      border-radius: 8px;
-      padding: 6px 12px;
-      border-left: 3px solid #f59e0b;
-      white-space: nowrap;
-    }
-    .pool-chip .chip-label {
-      font-size: 0.6rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      margin-bottom: 1px;
-    }
-    .pool-chip .chip-val {
-      font-size: 0.85rem;
-      font-weight: 700;
-    }
-    .pool-chip .chip-val.good { color: #16a34a; }
-    .pool-chip .chip-val.warn { color: #d97706; }
-    .pool-chip .chip-val.bad { color: #dc2626; }
-    .footer {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 0.75rem;
-      color: var(--text-faint);
-    }
+    .chip:hover { background: var(--surface-raised); }
+    .chip.off { color: var(--muted); }
+    .chip.off .dot { background: transparent !important; box-shadow: inset 0 0 0 1.5px var(--muted); }
+    .legend-actions { font-size: 0.75rem; }
+    .legend-actions button { background: none; border: none; color: var(--link); cursor: pointer; font: inherit; padding: 0; }
+
+    .chart-box { position: relative; }
+    canvas { width: 100% !important; }
+
+    .footer { font-size: 0.75rem; color: var(--muted); text-align: center; }
     .footer a { color: var(--link); }
+
+    @media (max-width: 600px) {
+      body { padding: 16px 12px 24px; }
+      .card { padding: 14px; }
+      header h1 { font-size: 1.25rem; }
+      .legend-row .fam { min-width: 0; width: 100%; }
+      .results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .result .big small { display: block; }
+      .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .tile .value { font-size: 1.25rem; }
+    }
   </style>
   <script data-goatcounter="https://express-entry-score-stats.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
-  <h1>Canada Express Entry &mdash; CRS Score Trends</h1>
-  <p class="subtitle">Minimum CRS score required per invitation round, grouped by program type. Circle size shows how many invitations the round issued.</p>
+  <main class="page">
+    <header>
+      <h1>Canada Express Entry &mdash; CRS cutoffs</h1>
+      <p class="subtitle">The lowest CRS score invited in each round, by program. Bigger circles mean more invitations.</p>
+    </header>
 
-  <div class="toolbar">
-    <div class="toolbar-group" id="timeRange">
-      <button class="active" data-range="all">All Time</button>
-      <button data-range="3y">Last 3 Years</button>
-    </div>
-    <div class="toolbar-group" id="projectionMode">
-      <button class="active" data-proj="off">Off</button>
-      <button data-proj="linear">Linear</button>
-      <button data-proj="moving-avg">Moving Avg</button>
-      <button data-proj="poly">Polynomial</button>
-    </div>
-    <div class="toolbar-group" id="themeToggle">
-      <button data-theme="auto" class="active">Auto</button>
-      <button data-theme="light">Light</button>
-      <button data-theme="dark">Dark</button>
-    </div>
-  </div>
-  <div class="score-bar">
-    <label for="scoreInput">Your CRS Score</label>
-    <input type="number" id="scoreInput" min="0" max="1200" placeholder="480" />
-    <div id="poolPosition" class="pool-position-inline" style="display:none;"></div>
-    <div class="score-cards" id="scoreResults"></div>
-  </div>
-  <div class="controls" id="controls"></div>
-  <div class="chart-container">
-    <canvas id="chart"></canvas>
-  </div>
-  <div class="stats" id="stats"></div>
+    <section class="card hero">
+      <div class="hero-top">
+        <label for="scoreInput" class="hero-label">Your CRS score</label>
+        <input type="number" id="scoreInput" min="0" max="1200" placeholder="480" inputmode="numeric" />
+        <div id="poolPosition" class="pool-chips"></div>
+      </div>
+      <p class="hint" id="scoreHint"></p>
+      <div class="results" id="scoreResults"></div>
+    </section>
 
-  <h2 class="section-heading">CRS Score Pool Distribution</h2>
-  <p class="subtitle">Number of candidates in the Express Entry pool by score range over time</p>
+    <section class="tiles" id="stats"></section>
 
-  <div class="chart-container" id="distChartContainer">
-    <canvas id="distChart"></canvas>
-  </div>
+    <section class="card">
+      <div class="chart-toolbar">
+        <div class="seg"><span class="seg-label">Range</span>
+          <div class="toolbar-group" id="timeRange">
+            <button class="active" data-range="all">All time</button>
+            <button data-range="3y">Last 3 years</button>
+          </div>
+        </div>
+        <div class="seg"><span class="seg-label">Trend</span>
+          <div class="toolbar-group" id="projectionMode">
+            <button class="active" data-proj="off">Off</button>
+            <button data-proj="on">On</button>
+          </div>
+        </div>
+        <div class="seg"><span class="seg-label">Theme</span>
+          <div class="toolbar-group" id="themeToggle">
+            <button data-theme="auto" class="active">Auto</button>
+            <button data-theme="light">Light</button>
+            <button data-theme="dark">Dark</button>
+          </div>
+        </div>
+      </div>
+      <div class="legend" id="controls"></div>
+      <div class="chart-box"><canvas id="chart"></canvas></div>
+    </section>
 
-  <p class="footer">
+    <section class="card">
+      <h2>Who&rsquo;s in the pool</h2>
+      <p class="subtitle" id="distSubtitle">Candidates in the Express Entry pool by score range.</p>
+      <div class="chart-box" id="distChartContainer" style="margin-top: 12px;">
+        <canvas id="distChart"></canvas>
+      </div>
+    </section>
+
+    <p class="footer">
     Contains information licensed under the <a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence &ndash; Canada</a>.
     Data source: <a href="${data.source}">IRCC Express Entry Rounds</a>
     &middot; Fetched ${new Date(data.fetchedAt).toLocaleDateString()}
@@ -503,31 +483,53 @@ function main() {
     and <a href="https://github.com/chartjs/chartjs-plugin-annotation">chartjs-plugin-annotation</a>
     (MIT License)
     &middot; <a href="https://github.com/skfd/express_entry_score_stats">View on GitHub</a>
-  </p>
+    </p>
+  </main>
 
   <script>
     const originalDatasets = ${chartData};
-    // Circle area is proportional to invitations issued in the round
-    originalDatasets.forEach(ds => {
-      ds.pointRadius = (c) => (c.raw && c.raw.r) || 3;
-      ds.pointHoverRadius = (c) => ((c.raw && c.raw.r) || 3) + 3;
-    });
+    const familyLabels = ${familyLabels};
     const distributionSnapshots = ${distributionData};
     const PROJECTION_MONTHS = 6;
     const MOVING_AVG_WINDOW = 6;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    // A line segment spanning more than ~6 months without a round is not drawn:
+    // it would show a trend across a stretch with no data.
+    const GAP_MS = 183 * DAY_MS;
+
+    originalDatasets.forEach(ds => {
+      // Circle area is proportional to invitations issued in the round
+      ds.pointRadius = (c) => (c.raw && c.raw.r) || 3;
+      ds.pointHoverRadius = (c) => ((c.raw && c.raw.r) || 3) + 3;
+      ds.segment = {
+        borderColor: (c) => (c.p1.parsed.x - c.p0.parsed.x > GAP_MS ? 'transparent' : undefined),
+      };
+    });
 
     // Stubs — replaced once distribution chart is initialized
     var onScoreChanged = function(score) {};
     var onTimeRangeChanged = function() {};
     var onThemeChanged = function() {};
 
+    // Date-only strings (YYYY-MM-DD) are local calendar dates; new Date('2026-10-28')
+    // would be UTC midnight, which shows as Oct 27 west of Greenwich.
+    const fmtDate = (s, opts) => new Date(String(s).length === 10 ? s + 'T00:00:00' : s)
+      .toLocaleDateString('en-CA', opts || { year: 'numeric', month: 'short', day: 'numeric' });
+    const median = (arr) => {
+      if (!arr.length) return 0;
+      const s = [...arr].sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)];
+    };
+
     // ========== URL state persistence ==========
 
     function readURL() {
       const p = new URLSearchParams(window.location.search);
+      const proj = p.get('proj');
       return {
         range: p.get('range') || 'all',
-        proj: p.get('proj') || 'off',
+        // Older links used proj=linear|moving-avg|poly; any of them means "trend on"
+        proj: proj && proj !== 'off' ? 'on' : 'off',
         hide: p.get('hide') ? p.get('hide').split(',').filter(Boolean) : [],
         score: p.get('score') || '',
         theme: p.get('theme') || 'auto',
@@ -537,7 +539,7 @@ function main() {
     function writeURL() {
       const p = new URLSearchParams();
       if (timeRange !== 'all') p.set('range', timeRange);
-      if (projectionMode !== 'off') p.set('proj', projectionMode);
+      if (projectionMode !== 'off') p.set('proj', 'on');
       if (hiddenCategories.size > 0) {
         const indices = [];
         originalDatasets.forEach((ds, i) => { if (hiddenCategories.has(ds.label)) indices.push(i); });
@@ -556,19 +558,39 @@ function main() {
     let userScore = initState.score ? parseInt(initState.score, 10) : 0;
     let currentTheme = initState.theme;
 
+    // Restore hidden categories from URL
+    const hiddenCategories = new Set();
+    initState.hide.forEach(idx => {
+      const i = parseInt(idx, 10);
+      if (originalDatasets[i]) hiddenCategories.add(originalDatasets[i].label);
+    });
+
+    function rangeCutoff() {
+      if (timeRange !== '3y') return 0;
+      const n = new Date();
+      return new Date(n.getFullYear() - 3, n.getMonth(), n.getDate()).getTime();
+    }
+
+    // Yearly ticks for all time; quarterly for the last 3 years
+    function timeAxis() {
+      return timeRange === '3y'
+        ? { unit: 'quarter', displayFormats: { quarter: 'MMM yyyy' }, tooltipFormat: 'PP' }
+        : { unit: 'year', displayFormats: { year: 'yyyy' }, tooltipFormat: 'PP' };
+    }
+
     // ========== Theme management ==========
 
     const darkColors = {
-      gridX: '#1e293b', gridY: '#334155',
-      tick: '#94a3b8', axisTitle: '#94a3b8',
-      tooltipBg: '#1e293b', tooltipTitle: '#f1f5f9',
-      tooltipBody: '#cbd5e1', tooltipBorder: '#334155',
+      grid: '#2c2c2a', tick: '#898781', axisTitle: '#898781',
+      ink: '#f0efec', surface: '#1a1a19',
+      tooltipBg: '#2c2c2a', tooltipTitle: '#f0efec',
+      tooltipBody: '#c3c2b7', tooltipBorder: '#383835',
     };
     const lightColors = {
-      gridX: '#e2e8f0', gridY: '#cbd5e1',
-      tick: '#64748b', axisTitle: '#64748b',
-      tooltipBg: '#ffffff', tooltipTitle: '#0f172a',
-      tooltipBody: '#334155', tooltipBorder: '#e2e8f0',
+      grid: '#e1e0d9', tick: '#898781', axisTitle: '#898781',
+      ink: '#0b0b0b', surface: '#fcfcfb',
+      tooltipBg: '#ffffff', tooltipTitle: '#0b0b0b',
+      tooltipBody: '#52514e', tooltipBorder: '#e1e0d9',
     };
 
     function resolveTheme(pref) {
@@ -581,26 +603,40 @@ function main() {
       return resolveTheme(currentTheme) === 'light' ? lightColors : darkColors;
     }
 
+    // Series colours are stepped separately for each surface
+    function paintDatasets() {
+      const light = resolveTheme(currentTheme) === 'light';
+      originalDatasets.forEach(ds => {
+        const c = light ? ds.colorLight : ds.colorDark;
+        ds.borderColor = c;
+        ds.backgroundColor = c + '40';
+      });
+      legendDots.forEach((dot, i) => { if (dot) dot.style.background = originalDatasets[i].borderColor; });
+    }
+
     let chartRef = null;
+    const legendDots = [];
 
     function applyTheme() {
       const effective = resolveTheme(currentTheme);
       document.documentElement.classList.toggle('light', effective === 'light');
+      paintDatasets();
 
-      // Update chart colors
       if (chartRef) {
         const c = getThemeColors();
-        chartRef.options.scales.x.grid.color = c.gridX;
-        chartRef.options.scales.x.ticks.color = c.tick;
-        chartRef.options.scales.x.title.color = c.axisTitle;
-        chartRef.options.scales.y.grid.color = c.gridY;
-        chartRef.options.scales.y.ticks.color = c.tick;
-        chartRef.options.scales.y.title.color = c.axisTitle;
-        chartRef.options.plugins.tooltip.backgroundColor = c.tooltipBg;
-        chartRef.options.plugins.tooltip.titleColor = c.tooltipTitle;
-        chartRef.options.plugins.tooltip.bodyColor = c.tooltipBody;
-        chartRef.options.plugins.tooltip.borderColor = c.tooltipBorder;
-        chartRef.update('none');
+        const o = chartRef.options;
+        o.scales.x.grid.color = c.grid;
+        o.scales.x.ticks.color = c.tick;
+        o.scales.y.grid.color = c.grid;
+        o.scales.y.ticks.color = c.tick;
+        o.scales.y.title.color = c.axisTitle;
+        o.plugins.tooltip.backgroundColor = c.tooltipBg;
+        o.plugins.tooltip.titleColor = c.tooltipTitle;
+        o.plugins.tooltip.bodyColor = c.tooltipBody;
+        o.plugins.tooltip.borderColor = c.tooltipBorder;
+        updateScoreLine();
+        rebuildChart();
+        updateStats();
       }
       onThemeChanged();
     }
@@ -613,7 +649,7 @@ function main() {
       if (currentTheme === 'auto') applyTheme();
     });
 
-    // ========== Projection math ==========
+    // ========== Trend math ==========
 
     // Linear regression: y = slope * x + intercept
     function linearRegression(pts) {
@@ -628,56 +664,12 @@ function main() {
       return { eval: (x) => slope * x + intercept, slope, intercept };
     }
 
-    // Polynomial (quadratic) regression: y = a*x^2 + b*x + c
-    // Normalises timestamps to avoid floating-point blowup
-    function polyRegression(pts) {
-      const n = pts.length;
-      if (n < 4) return linearRegression(pts); // fall back
-      const xMin = pts[0].x;
-      const xRange = pts[n - 1].x - xMin || 1;
-      const norm = pts.map(p => ({ x: (p.x - xMin) / xRange, y: p.y }));
-
-      let s0=n, s1=0, s2=0, s3=0, s4=0, t0=0, t1=0, t2=0;
-      for (const p of norm) {
-        const x = p.x, x2 = x*x;
-        s1 += x; s2 += x2; s3 += x2*x; s4 += x2*x2;
-        t0 += p.y; t1 += x*p.y; t2 += x2*p.y;
-      }
-      // Solve 3x3 system via Cramer's rule
-      const M = [
-        [s0, s1, s2],
-        [s1, s2, s3],
-        [s2, s3, s4],
-      ];
-      const T = [t0, t1, t2];
-      function det3(m) {
-        return m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])
-             - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])
-             + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
-      }
-      const D = det3(M);
-      if (Math.abs(D) < 1e-20) return linearRegression(pts);
-      function replCol(m, col, v) {
-        return m.map((row, i) => row.map((c, j) => j === col ? v[i] : c));
-      }
-      const c = det3(replCol(M, 0, T)) / D;
-      const b = det3(replCol(M, 1, T)) / D;
-      const a = det3(replCol(M, 2, T)) / D;
-      return {
-        eval: (x) => {
-          const xn = (x - xMin) / xRange;
-          return a * xn * xn + b * xn + c;
-        },
-        a, b, c,
-      };
-    }
-
-    // Moving average (trailing window) — returns smoothed series + projected continuation
+    // Trend = trailing moving average of the last MOVING_AVG_WINDOW rounds,
+    // continued PROJECTION_MONTHS ahead along the slope of its last 3 points.
     function movingAvgProjection(filtered, dsLabel, dsColor) {
       if (filtered.length < MOVING_AVG_WINDOW) return null;
 
       const sorted = [...filtered].sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
-      // Smoothed overlay on historical data
       const smoothed = [];
       for (let i = MOVING_AVG_WINDOW - 1; i < sorted.length; i++) {
         let sum = 0;
@@ -685,19 +677,15 @@ function main() {
         smoothed.push({
           x: sorted[i].x,
           y: Math.round(sum / MOVING_AVG_WINDOW),
-          roundNumber: '~',
-          roundType: dsLabel + ' (moving avg)',
+          roundType: dsLabel + ' (trend)',
           invitations: 0,
           isProjection: true,
-          projMethod: 'moving-avg',
         });
       }
 
-      // Project forward: use slope of last few smoothed points
       if (smoothed.length >= 2) {
         const tail = smoothed.slice(-3);
-        const pts = tail.map(p => ({ x: new Date(p.x).getTime(), y: p.y }));
-        const reg = linearRegression(pts);
+        const reg = linearRegression(tail.map(p => ({ x: new Date(p.x).getTime(), y: p.y })));
         if (reg) {
           const lastDate = new Date(smoothed[smoothed.length - 1].x);
           const endDate = new Date(lastDate);
@@ -708,11 +696,9 @@ function main() {
             smoothed.push({
               x: new Date(t).toISOString().split('T')[0],
               y: Math.max(0, Math.round(reg.eval(t))),
-              roundNumber: '~',
-              roundType: dsLabel + ' (moving avg forecast)',
+              roundType: dsLabel + ' (forecast)',
               invitations: 0,
               isProjection: true,
-              projMethod: 'moving-avg',
             });
           }
         }
@@ -729,51 +715,9 @@ function main() {
         borderDash: [2, 3],
         tension: 0.3,
         showLine: true,
-        _isProjection: true,
-      };
-    }
-
-    // Generic regression projection (linear or poly)
-    function regressionProjection(filtered, dsLabel, dsColor, regFn, dashPattern, suffix) {
-      if (filtered.length < 3) return null;
-      const sorted = [...filtered].sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
-      const pts = sorted.map(d => ({ x: new Date(d.x).getTime(), y: d.y }));
-      const reg = regFn(pts);
-      if (!reg) return null;
-
-      const projPoints = [];
-      // Trend line over historical range
-      const firstT = pts[0].x, lastT = pts[pts.length - 1].x;
-      const totalSteps = 40;
-      const projEndDate = new Date(lastT);
-      projEndDate.setMonth(projEndDate.getMonth() + PROJECTION_MONTHS);
-      const projEndT = projEndDate.getTime();
-
-      for (let i = 0; i <= totalSteps; i++) {
-        const t = firstT + (projEndT - firstT) * (i / totalSteps);
-        const isFuture = t > lastT;
-        projPoints.push({
-          x: new Date(t).toISOString().split('T')[0],
-          y: Math.max(0, Math.round(reg.eval(t))),
-          roundNumber: '~',
-          roundType: dsLabel + ' (' + suffix + (isFuture ? ' forecast' : ' trend') + ')',
-          invitations: 0,
-          isProjection: true,
-          projMethod: suffix,
-        });
-      }
-
-      return {
-        label: dsLabel + ' (' + suffix + ')',
-        data: projPoints,
-        borderColor: dsColor,
-        backgroundColor: 'transparent',
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        borderWidth: 2,
-        borderDash: dashPattern,
-        tension: 0.3,
-        showLine: true,
+        segment: {
+          borderColor: (c) => (c.p1.parsed.x - c.p0.parsed.x > GAP_MS ? 'transparent' : undefined),
+        },
         _isProjection: true,
       };
     }
@@ -781,10 +725,7 @@ function main() {
     // ========== Dataset builder ==========
 
     function buildDatasets() {
-      const cutoff = timeRange === '3y'
-        ? new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).getTime()
-        : 0;
-
+      const cutoff = rangeCutoff();
       const result = [];
 
       for (const ds of originalDatasets) {
@@ -794,52 +735,68 @@ function main() {
 
         result.push({ ...ds, data: filtered });
 
-        if (projectionMode === 'off' || filtered.length < 3) continue;
-
-        if (projectionMode === 'linear') {
-          const proj = regressionProjection(filtered, ds.label, ds.borderColor, linearRegression, [6, 4], 'linear');
-          if (proj) result.push(proj);
-        }
-        if (projectionMode === 'moving-avg') {
-          const proj = movingAvgProjection(filtered, ds.label, ds.borderColor);
-          if (proj) result.push(proj);
-        }
-        if (projectionMode === 'poly') {
-          const proj = regressionProjection(filtered, ds.label, ds.borderColor, polyRegression, [8, 3, 2, 3], 'polynomial');
-          if (proj) result.push(proj);
-        }
+        // Trend lines only for main programs: in a shared-colour family several
+        // same-coloured trend lines would be indistinguishable.
+        if (projectionMode === 'off' || ds.family !== 'main' || filtered.length < 3) continue;
+        const proj = movingAvgProjection(filtered, ds.label, ds.borderColor);
+        if (proj) result.push(proj);
       }
 
       return result;
     }
 
-    // ========== Category toggle buttons ==========
-
-    // Restore hidden categories from URL
-    const hiddenCategories = new Set();
-    initState.hide.forEach(idx => {
-      const i = parseInt(idx, 10);
-      if (originalDatasets[i]) hiddenCategories.add(originalDatasets[i].label);
-    });
+    // ========== Legend chips (also the program filter) ==========
 
     const controlsEl = document.getElementById('controls');
-    const allBtn = document.createElement('button');
-    allBtn.textContent = 'All';
-    allBtn.className = hiddenCategories.size === 0 ? 'active' : '';
-    allBtn.onclick = () => toggleAll();
-    controlsEl.appendChild(allBtn);
-
     const categoryButtons = [];
-    originalDatasets.forEach((ds, i) => {
-      const btn = document.createElement('button');
-      btn.textContent = ds.label;
-      btn.style.borderLeftColor = ds.borderColor;
-      btn.style.borderLeftWidth = '3px';
-      btn.className = hiddenCategories.has(ds.label) ? '' : 'active';
-      btn.onclick = () => toggleDataset(i, btn);
-      controlsEl.appendChild(btn);
-      categoryButtons.push(btn);
+
+    ['main', 'occupation', 'new'].forEach(fam => {
+      const idxs = originalDatasets.map((d, i) => i).filter(i => originalDatasets[i].family === fam);
+      if (!idxs.length) return;
+      const row = document.createElement('div');
+      row.className = 'legend-row';
+      const famBtn = document.createElement('button');
+      famBtn.className = 'fam';
+      famBtn.textContent = familyLabels[fam];
+      famBtn.title = 'Show only ' + familyLabels[fam].toLowerCase() + ' (click again to show all)';
+      famBtn.onclick = () => soloFamily(fam);
+      row.appendChild(famBtn);
+      idxs.forEach(i => {
+        const ds = originalDatasets[i];
+        const btn = document.createElement('button');
+        btn.className = 'chip';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = ds.borderColor;
+        btn.appendChild(dot);
+        btn.appendChild(document.createTextNode(ds.label));
+        btn.title = ds.data.length + ' round' + (ds.data.length !== 1 ? 's' : '');
+        btn.onclick = () => toggleDataset(i);
+        row.appendChild(btn);
+        categoryButtons[i] = btn;
+        legendDots[i] = dot;
+      });
+      controlsEl.appendChild(row);
     });
+
+    const legendActions = document.createElement('div');
+    legendActions.className = 'legend-actions';
+    const showAllBtn = document.createElement('button');
+    showAllBtn.textContent = 'Show all programs';
+    showAllBtn.onclick = () => { hiddenCategories.clear(); afterLegendChange(); };
+    legendActions.appendChild(showAllBtn);
+    controlsEl.appendChild(legendActions);
+
+    function syncLegend() {
+      categoryButtons.forEach((btn, i) => {
+        if (!btn) return;
+        const off = hiddenCategories.has(originalDatasets[i].label);
+        btn.classList.toggle('off', off);
+        btn.setAttribute('aria-pressed', String(!off));
+      });
+      legendActions.style.visibility = hiddenCategories.size ? 'visible' : 'hidden';
+    }
+    syncLegend();
 
     // ========== Chart ==========
 
@@ -858,23 +815,15 @@ function main() {
             callbacks: {
               title: (items) => {
                 const d = items[0].raw;
-                const dateStr = new Date(d.x).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
-                if (d.isProjection) return d.roundType.split('(')[0].trim() + ' — ' + dateStr;
-                return 'Round #' + d.roundNumber + ' — ' + dateStr;
+                if (d.isProjection) return d.roundType + ' — ' + fmtDate(d.x);
+                return 'Round #' + d.roundNumber + ' — ' + fmtDate(d.x);
               },
               label: (item) => {
                 const d = item.raw;
-                if (d.isProjection) {
-                  const method = d.projMethod || 'projected';
-                  const methodLabels = { linear: 'Linear', 'moving-avg': 'Moving Avg', polynomial: 'Polynomial' };
-                  return [
-                    (methodLabels[method] || method) + ' projection',
-                    'Projected CRS: ' + d.y,
-                  ];
-                }
+                if (d.isProjection) return 'Trend CRS: ' + d.y;
                 return [
                   d.roundType,
-                  'CRS Score: ' + d.y,
+                  'CRS cutoff: ' + d.y,
                   'Invitations: ' + d.invitations.toLocaleString(),
                 ];
               },
@@ -890,28 +839,29 @@ function main() {
         scales: {
           x: {
             type: 'time',
-            time: { unit: 'month', displayFormats: { month: 'MMM yyyy' } },
-            grid: { color: getThemeColors().gridX },
-            ticks: { color: getThemeColors().tick, maxRotation: 45 },
-            title: { display: true, text: 'Date', color: getThemeColors().axisTitle },
+            time: timeAxis(),
+            grid: { color: getThemeColors().grid },
+            border: { display: false },
+            ticks: { color: getThemeColors().tick, maxRotation: 0, autoSkipPadding: 16 },
           },
           y: {
-            grid: { color: getThemeColors().gridY },
+            grid: { color: getThemeColors().grid },
+            border: { display: false },
             ticks: { color: getThemeColors().tick },
-            title: { display: true, text: 'CRS Score (minimum to be invited)', color: getThemeColors().axisTitle },
+            title: { display: true, text: 'CRS cutoff (lowest score invited)', color: getThemeColors().axisTitle },
           },
         },
       },
     });
 
     chartRef = chart;
-    chart.canvas.parentNode.style.height = '550px';
+    chart.canvas.parentNode.style.height = (window.innerWidth < 600 ? 420 : 520) + 'px';
     chart.resize();
 
     // Apply URL-restored hidden state to the initial render
     if (hiddenCategories.size > 0) {
       chart.data.datasets.forEach((ds, i) => {
-        const base = ds.label.replace(/ \\((?:linear|ma|polynomial|proj)\\)$/, '');
+        const base = ds.label.replace(/ \\((?:ma)\\)$/, '');
         chart.getDatasetMeta(i).hidden = hiddenCategories.has(base);
       });
       chart.update('none');
@@ -923,35 +873,34 @@ function main() {
       const ds = buildDatasets();
       chart.data.datasets = ds;
       ds.forEach((d, i) => {
-        const base = d.label.replace(/ \\((?:linear|ma|polynomial|proj)\\)$/, '');
+        const base = d.label.replace(/ \\((?:ma)\\)$/, '');
         chart.getDatasetMeta(i).hidden = hiddenCategories.has(base);
       });
       chart.update();
       if (userScore > 0) buildScoreResults(userScore);
     }
 
-    function toggleDataset(origIdx, btn) {
-      const label = originalDatasets[origIdx].label;
-      if (hiddenCategories.has(label)) { hiddenCategories.delete(label); btn.classList.add('active'); }
-      else { hiddenCategories.add(label); btn.classList.remove('active'); }
-      allBtn.classList.toggle('active', hiddenCategories.size === 0);
+    function afterLegendChange() {
+      syncLegend();
       rebuildChart();
       writeURL();
     }
 
-    function toggleAll() {
-      const allVis = hiddenCategories.size === 0;
-      if (allVis) {
-        originalDatasets.forEach(ds => hiddenCategories.add(ds.label));
-        categoryButtons.forEach(b => b.classList.remove('active'));
-        allBtn.classList.remove('active');
-      } else {
-        hiddenCategories.clear();
-        categoryButtons.forEach(b => b.classList.add('active'));
-        allBtn.classList.add('active');
-      }
-      rebuildChart();
-      writeURL();
+    function toggleDataset(origIdx) {
+      const label = originalDatasets[origIdx].label;
+      if (hiddenCategories.has(label)) hiddenCategories.delete(label);
+      else hiddenCategories.add(label);
+      afterLegendChange();
+    }
+
+    // Show only one family; clicking the same family again shows everything
+    function soloFamily(fam) {
+      const outside = originalDatasets.filter(ds => ds.family !== fam).map(ds => ds.label);
+      const alreadySolo = outside.every(l => hiddenCategories.has(l)) &&
+        originalDatasets.every(ds => ds.family !== fam || !hiddenCategories.has(ds.label));
+      hiddenCategories.clear();
+      if (!alreadySolo) outside.forEach(l => hiddenCategories.add(l));
+      afterLegendChange();
     }
 
     // ========== Toolbar handlers ==========
@@ -961,18 +910,15 @@ function main() {
       btn.classList.toggle('active', btn.dataset.range === timeRange);
     });
     document.querySelectorAll('#projectionMode button').forEach(btn => {
-      const match = btn.dataset.proj === projectionMode;
-      btn.classList.toggle('active', match);
-      btn.classList.toggle('projection-on', match && projectionMode !== 'off');
+      btn.classList.toggle('active', btn.dataset.proj === projectionMode);
     });
 
     document.querySelectorAll('#timeRange button').forEach(btn => {
       btn.addEventListener('click', () => {
         timeRange = btn.dataset.range;
-        document.querySelectorAll('#timeRange button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        document.querySelectorAll('#timeRange button').forEach(b => b.classList.toggle('active', b === btn));
+        chart.options.scales.x.time = timeAxis();
         rebuildChart();
-        updateStats();
         onTimeRangeChanged();
         writeURL();
       });
@@ -981,12 +927,7 @@ function main() {
     document.querySelectorAll('#projectionMode button').forEach(btn => {
       btn.addEventListener('click', () => {
         projectionMode = btn.dataset.proj;
-        document.querySelectorAll('#projectionMode button').forEach(b => {
-          b.classList.remove('active');
-          b.classList.remove('projection-on');
-        });
-        btn.classList.add('active');
-        if (projectionMode !== 'off') btn.classList.add('projection-on');
+        document.querySelectorAll('#projectionMode button').forEach(b => b.classList.toggle('active', b === btn));
         rebuildChart();
         writeURL();
       });
@@ -1000,53 +941,75 @@ function main() {
     document.querySelectorAll('#themeToggle button').forEach(btn => {
       btn.addEventListener('click', () => {
         currentTheme = btn.dataset.theme;
-        document.querySelectorAll('#themeToggle button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        document.querySelectorAll('#themeToggle button').forEach(b => b.classList.toggle('active', b === btn));
         applyTheme();
         writeURL();
       });
     });
 
-    // ========== Stats ==========
+    // ========== Latest-draw tiles (independent of the range filter) ==========
 
     function updateStats() {
       const statsEl = document.getElementById('stats');
-      statsEl.innerHTML = '';
-      const cutoff = timeRange === '3y'
-        ? new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).getTime()
-        : 0;
-      const allRounds = originalDatasets.flatMap(ds => ds.data)
-        .filter(d => cutoff === 0 || new Date(d.x).getTime() >= cutoff);
-      allRounds.sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
-      if (!allRounds.length) return;
-      const latest = allRounds[allRounds.length - 1];
-      const scores = allRounds.map(r => r.y);
-      [
-        { label: 'Rounds Shown', value: allRounds.length },
-        { label: 'Latest CRS Score', value: latest.y + ' (' + latest.roundType + ')' },
-        { label: 'Lowest CRS', value: Math.min(...scores) },
-        { label: 'Highest CRS', value: Math.max(...scores) },
-        { label: 'Program Types', value: originalDatasets.length },
-        { label: 'Date Range', value: allRounds[0].x + ' to ' + allRounds[allRounds.length - 1].x },
-      ].forEach(s => {
-        const card = document.createElement('div');
-        card.className = 'stat-card';
-        card.innerHTML = '<h3>' + s.label + '</h3><div class="value">' + s.value + '</div>';
-        statsEl.appendChild(card);
+      const rounds = originalDatasets
+        .flatMap((ds, i) => ds.data.map(d => ({ ...d, prog: ds.label, idx: i })))
+        .sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
+      if (!rounds.length) { statsEl.innerHTML = ''; return; }
+
+      const latest = rounds[rounds.length - 1];
+      const latestT = new Date(latest.x).getTime();
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const days = Math.max(0, Math.round((today.getTime() - new Date(latest.x + 'T00:00:00').getTime()) / DAY_MS));
+      const last30 = rounds.filter(r => latestT - new Date(r.x).getTime() < 30 * DAY_MS).length;
+
+      const year = new Date(latest.x).getUTCFullYear();
+      const thisYear = rounds.filter(r => r.x.slice(0, 4) === String(year));
+      const yearInv = thisYear.reduce((s, r) => s + (r.invitations || 0), 0);
+
+      // Median cutoff per program over the 6 months before the latest round
+      const recent = rounds.filter(r => latestT - new Date(r.x).getTime() <= 183 * DAY_MS);
+      const byProg = new Map();
+      recent.forEach(r => {
+        if (!byProg.has(r.idx)) byProg.set(r.idx, []);
+        byProg.get(r.idx).push(r.y);
       });
+      const progRows = [...byProg.entries()]
+        .sort((a, b) => b[1].length - a[1].length)
+        .slice(0, 5)
+        .map(([i, ys]) =>
+          '<div><span class="dot" style="background:' + originalDatasets[i].borderColor + '"></span>' +
+          esc(originalDatasets[i].label) + '<b>' + median(ys) + '</b></div>')
+        .join('');
+
+      statsEl.innerHTML =
+        tile('Latest draw', latest.y + ' <small style="font-size:0.8rem;font-weight:500;color:var(--ink-2)">CRS</small>',
+          esc(latest.prog) + ' &middot; ' + fmtDate(latest.x) + ' &middot; ' + latest.invitations.toLocaleString() + ' invited') +
+        tile('Since the last draw', days + (days === 1 ? ' day' : ' days'),
+          last30 + ' round' + (last30 !== 1 ? 's' : '') + ' in the 30 days before it') +
+        tile('Invitations in ' + year, yearInv.toLocaleString(),
+          thisYear.length + ' round' + (thisYear.length !== 1 ? 's' : '') + ' so far') +
+        '<div class="tile"><div class="label">Median cutoff, last 6 months</div><div class="rows">' + progRows + '</div></div>';
+    }
+
+    function tile(label, value, sub) {
+      return '<div class="tile"><div class="label">' + label + '</div><div class="value">' + value +
+        '</div><div class="sub">' + sub + '</div></div>';
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     }
 
     updateStats();
 
-    // ========== Score input + horizontal line + eligibility results ==========
+    // ========== Score input + reference line + per-program results ==========
 
     const scoreInput = document.getElementById('scoreInput');
     const scoreResultsEl = document.getElementById('scoreResults');
+    const scoreHintEl = document.getElementById('scoreHint');
 
-    if (userScore > 0) {
-      scoreInput.value = userScore;
-      applyScore(userScore);
-    }
+    if (userScore > 0) scoreInput.value = userScore;
+    applyScore(userScore);
 
     scoreInput.addEventListener('input', () => {
       const val = parseInt(scoreInput.value, 10);
@@ -1055,105 +1018,87 @@ function main() {
       writeURL();
     });
 
-    function applyScore(score) {
-      // Update annotation line
-      if (score > 0) {
-        chart.options.plugins.annotation.annotations.scoreLine = {
+    function updateScoreLine() {
+      const anns = chart.options.plugins.annotation.annotations;
+      if (userScore > 0) {
+        const c = getThemeColors();
+        anns.scoreLine = {
           type: 'line',
-          yMin: score,
-          yMax: score,
-          borderColor: '#f59e0b',
-          borderWidth: 2,
-          borderDash: [8, 4],
+          yMin: userScore,
+          yMax: userScore,
+          borderColor: c.ink,
+          borderWidth: 1.5,
+          borderDash: [6, 4],
           label: {
             display: true,
-            content: 'Your score: ' + score,
+            content: 'Your score ' + userScore,
             position: 'start',
-            backgroundColor: '#f59e0bcc',
-            color: '#0f172a',
-            font: { weight: 'bold', size: 12 },
+            backgroundColor: c.ink,
+            color: c.surface,
+            font: { weight: '600', size: 12 },
             padding: { top: 3, bottom: 3, left: 8, right: 8 },
             borderRadius: 4,
           },
         };
       } else {
-        delete chart.options.plugins.annotation.annotations.scoreLine;
+        delete anns.scoreLine;
       }
+    }
+
+    function applyScore(score) {
+      updateScoreLine();
       chart.update('none');
-
-      // Build eligibility results
       buildScoreResults(score);
-
-      // Update pool position and distribution chart
       onScoreChanged(score);
     }
 
+    // One card per visible program that held a round in the past 12 months:
+    // how many of its last 10 cutoffs the score met, and how the last one went.
     function buildScoreResults(score) {
       scoreResultsEl.innerHTML = '';
-      if (!score || score <= 0) return;
+      if (!score || score <= 0) {
+        scoreHintEl.textContent = 'Enter your score to see how it compares with each program’s recent rounds.';
+        return;
+      }
 
-      const cutoff = timeRange === '3y'
-        ? new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).getTime()
-        : 0;
+      const latestT = Math.max(...originalDatasets.flatMap(ds => ds.data.map(d => new Date(d.x).getTime())));
+      let shown = 0;
 
       originalDatasets.forEach(ds => {
-        if (hiddenCategories.has(ds.label)) return;
+        if (hiddenCategories.has(ds.label) || !ds.data.length) return;
+        const sorted = [...ds.data].sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
+        const last = sorted[sorted.length - 1];
+        if (latestT - new Date(last.x).getTime() > 365 * DAY_MS) return;
 
-        const filtered = cutoff > 0
-          ? ds.data.filter(d => new Date(d.x).getTime() >= cutoff)
-          : ds.data;
+        const lastN = sorted.slice(-10);
+        const met = lastN.filter(d => d.y <= score).length;
+        const metLast = last.y <= score;
 
-        if (filtered.length < 2) return;
-
-        const sorted = [...filtered].sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
-
-        // Find historical rounds where user's score was enough (CRS cutoff <= score)
-        const eligible = sorted.filter(d => d.y <= score);
-        const lastEligible = eligible.length > 0 ? eligible[eligible.length - 1] : null;
-
-        // Find if the most recent round qualifies
-        const mostRecent = sorted[sorted.length - 1];
-        const currentlyEligible = mostRecent.y <= score;
-
-        // Check projection if active
-        let projectedDate = null;
-        if (projectionMode !== 'off' && !currentlyEligible) {
-          projectedDate = getProjectedCrossing(sorted, score, ds.label);
+        let status;
+        if (metLast) {
+          status = '<div class="sub good">✓ Met the last cutoff (' + last.y + ')</div>';
+        } else {
+          status = '<div class="sub bad">✗ Last cutoff ' + last.y + ' (+' + (last.y - score) + ')</div>';
+          if (projectionMode !== 'off') {
+            const projected = getProjectedCrossing(sorted, score, ds.label);
+            if (projected) status += '<div class="sub">Trend reaches you around ' + projected.replace(' *', '') + '</div>';
+          }
         }
 
         const card = document.createElement('div');
-        card.className = 'score-result-card';
-        card.style.borderLeftColor = ds.borderColor;
-
-        const catName = document.createElement('div');
-        catName.className = 'cat-name';
-        catName.textContent = ds.label;
-        card.appendChild(catName);
-
-        const result = document.createElement('div');
-        result.className = 'result-text';
-
-        if (currentlyEligible) {
-          result.classList.add('eligible');
-          const count = eligible.length;
-          result.textContent = 'Eligible now (' + count + ' past round' + (count !== 1 ? 's' : '') + ')';
-        } else if (projectedDate) {
-          result.classList.add('projected');
-          const isPoolAware = projectedDate.endsWith('*');
-          result.textContent = 'Projected: ' + projectedDate.replace(' *', '');
-          if (isPoolAware) result.title = 'Pool-aware projection (accounts for candidate density at each score range)';
-        } else if (lastEligible) {
-          result.classList.add('projected');
-          const d = new Date(lastEligible.x);
-          result.textContent = 'Last eligible: ' + d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short' });
-        } else {
-          result.classList.add('unlikely');
-          result.textContent = 'Score too low for this category';
-        }
-
-        card.appendChild(result);
+        card.className = 'result';
+        card.innerHTML =
+          '<div class="name"><span class="dot" style="background:' + ds.borderColor + '"></span>' + esc(ds.label) + '</div>' +
+          '<div class="big">' + met + '/' + lastN.length + ' <small>recent cutoffs met</small></div>' +
+          status +
+          '<div class="sub">Last round ' + fmtDate(last.x, { year: 'numeric', month: 'short', day: 'numeric' }) + '</div>';
         scoreResultsEl.appendChild(card);
+        shown++;
       });
+
+      scoreHintEl.textContent = shown
+        ? 'Programs that held a round in the past 12 months. A cutoff is met when your score is at or above it.'
+        : 'None of the programs shown held a round in the past 12 months.';
     }
 
     // ========== Pool-aware projection helpers ==========
@@ -1214,6 +1159,19 @@ function main() {
       return best;
     }
 
+    // Slope of the last 3 points of a trailing moving average; plain linear fit
+    // when there are too few points to smooth. pts: [{x: ms, y}] sorted by x.
+    function maTailRegression(pts) {
+      if (pts.length < MOVING_AVG_WINDOW) return linearRegression(pts);
+      const smoothed = [];
+      for (let i = MOVING_AVG_WINDOW - 1; i < pts.length; i++) {
+        let sum = 0;
+        for (let j = i - MOVING_AVG_WINDOW + 1; j <= i; j++) sum += pts[j].y;
+        smoothed.push({ x: pts[i].x, y: sum / MOVING_AVG_WINDOW });
+      }
+      return linearRegression(smoothed.slice(-3));
+    }
+
     function getProjectedCrossing(sorted, score, label) {
       const pts = sorted.map(d => ({ x: new Date(d.x).getTime(), y: d.y }));
 
@@ -1223,24 +1181,8 @@ function main() {
         if (poolResult) return poolResult;
       }
 
-      // Fall back to trend-based projection
-      let regFn = linearRegression;
-      if (projectionMode === 'poly') regFn = polyRegression;
-
-      if (projectionMode === 'moving-avg') {
-        // For moving avg, use tail slope
-        if (sorted.length < MOVING_AVG_WINDOW) return null;
-        const smoothed = [];
-        for (let i = MOVING_AVG_WINDOW - 1; i < sorted.length; i++) {
-          let sum = 0;
-          for (let j = i - MOVING_AVG_WINDOW + 1; j <= i; j++) sum += sorted[j].y;
-          smoothed.push({ x: new Date(sorted[i].x).getTime(), y: sum / MOVING_AVG_WINDOW });
-        }
-        const tail = smoothed.slice(-3);
-        regFn = () => linearRegression(tail);
-      }
-
-      const reg = regFn(pts);
+      // Fall back to the cutoff trend (same moving average as the chart)
+      const reg = maTailRegression(pts);
       if (!reg) return null;
 
       // Search forward up to 3 years for crossing point
@@ -1310,23 +1252,8 @@ function main() {
 
       if (userRatioSeries.length < 2) return null;
 
-      // Fit a regression to the user's ratio trend
-      let regFn = linearRegression;
-      if (projectionMode === 'poly') regFn = polyRegression;
-      if (projectionMode === 'moving-avg') {
-        if (userRatioSeries.length >= MOVING_AVG_WINDOW) {
-          const smoothed = [];
-          for (let i = MOVING_AVG_WINDOW - 1; i < userRatioSeries.length; i++) {
-            let sum = 0;
-            for (let j = i - MOVING_AVG_WINDOW + 1; j <= i; j++) sum += userRatioSeries[j].y;
-            smoothed.push({ x: userRatioSeries[i].x, y: sum / MOVING_AVG_WINDOW });
-          }
-          const tail = smoothed.slice(-3);
-          regFn = () => linearRegression(tail);
-        }
-      }
-
-      const reg = regFn(userRatioSeries);
+      // Fit the same moving-average trend to the user's ratio
+      const reg = maTailRegression(userRatioSeries);
       if (!reg) return null;
 
       // Search forward for when the ratio drops to <= 1.0 (favorable)
@@ -1352,11 +1279,19 @@ function main() {
       '411-420', '401-410', '351-400', '301-350', '0-300'
     ];
 
-    const distColors = [
-      '#7c3aed', '#6366f1', '#3b82f6', '#0ea5e9', '#06b6d4',
-      '#14b8a6', '#10b981', '#22c55e', '#84cc16', '#eab308',
-      '#f59e0b', '#f97316', '#ef4444', '#dc2626', '#991b1b'
-    ];
+    // Score bands are ordered, so they get one hue, light to dark (higher score
+    // = more ink on light, more light on dark). With a score entered, bands
+    // below it go neutral grey so the blue part is "candidates at or above you".
+    const DIST_RAMP = {
+      light: { lo: '#86b6ef', hi: '#0d366b', below: '#dcdad3' },
+      dark: { lo: '#184f95', hi: '#b7d3f6', below: '#3a3a37' },
+    };
+
+    function mixHex(a, b, t) {
+      const pa = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16));
+      const pb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16));
+      return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join('');
+    }
 
     let distChartRef = null;
 
@@ -1374,35 +1309,38 @@ function main() {
       }
 
       const container = document.getElementById('distChartContainer');
-      container.style.height = '450px';
+      container.style.height = (window.innerWidth < 600 ? 360 : 420) + 'px';
 
-      // History view — stacked area chart of pool over time
-      const cutoff = timeRange === '3y'
-        ? new Date(new Date().getFullYear() - 3, new Date().getMonth(), new Date().getDate()).getTime()
-        : 0;
+      const cutoff = rangeCutoff();
       const filtered = cutoff > 0
         ? distributionSnapshots.filter(s => new Date(s.date).getTime() >= cutoff)
         : distributionSnapshots;
 
       if (!filtered.length) return;
 
-      // Filter out ranges below user's score when a score is set
-      let histLabels = distRangeLabels;
-      let histColors = distColors;
+      const theme = getThemeColors();
+      const ramp = DIST_RAMP[resolveTheme(currentTheme)];
+      const cutIdx = userScore > 0 ? getScoreRangeIndex(userScore) : distRangeLabels.length - 1;
+      const n = distRangeLabels.length;
+      const colorFor = (i) => i <= cutIdx ? mixHex(ramp.lo, ramp.hi, (n - 1 - i) / (n - 1)) : ramp.below;
+
+      const sub = document.getElementById('distSubtitle');
       if (userScore > 0) {
-        const cutIdx = getScoreRangeIndex(userScore);
-        histLabels = distRangeLabels.slice(0, cutIdx + 1);
-        histColors = distColors.slice(0, cutIdx + 1);
+        const latest = getLatestDistribution();
+        const above = latest ? countAboveScore(latest, userScore) : 0;
+        sub.textContent = 'Candidates in the Express Entry pool by score range. Blue: your range (' +
+          distRangeLabels[cutIdx] + ') and above. Of those, about ' + above.toLocaleString() +
+          ' have ' + userScore + ' or more in the latest count. Grey: below your range.';
+      } else {
+        sub.textContent = 'Candidates in the Express Entry pool by score range. Darker bands are higher scores.';
       }
 
-      // Build datasets — one per score range, stacked (reversed so higher scores on top)
-      const revLabels = [...histLabels].reverse();
-      const revColors = [...histColors].reverse();
-      const datasets = revLabels.map((range, idx) => ({
+      // One dataset per score range, stacked with the highest scores on top
+      const datasets = distRangeLabels.map((range, i) => ({ range, i })).reverse().map(({ range, i }) => ({
         label: range,
         data: filtered.map(s => ({ x: s.date, y: s.ranges[range] || 0 })),
-        backgroundColor: revColors[idx] + '99',
-        borderColor: revColors[idx],
+        backgroundColor: colorFor(i),
+        borderColor: theme.surface,
         borderWidth: 1,
         fill: true,
         pointRadius: 0,
@@ -1421,54 +1359,49 @@ function main() {
             legend: {
               display: true,
               position: 'bottom',
-              labels: {
-                color: getThemeColors().tick,
-                font: { size: 10 },
-                boxWidth: 12,
-                padding: 8,
-              },
+              reverse: true,
+              labels: { color: theme.tick, font: { size: 10 }, boxWidth: 10, padding: 8 },
             },
             tooltip: {
+              itemSort: (a, b) => b.datasetIndex - a.datasetIndex,
               callbacks: {
-                title: (items) => {
-                  const d = new Date(items[0].raw.x);
-                  return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
-                },
-                label: (item) => {
-                  return item.dataset.label + ': ' + item.raw.y.toLocaleString();
-                },
+                title: (items) => fmtDate(items[0].raw.x),
+                label: (item) => item.dataset.label + ': ' + item.raw.y.toLocaleString(),
+                labelColor: (item) => ({ borderColor: item.dataset.backgroundColor, backgroundColor: item.dataset.backgroundColor }),
                 footer: (items) => {
                   const total = items.reduce((s, it) => s + it.raw.y, 0);
                   return 'Total pool: ' + total.toLocaleString();
                 },
               },
-              backgroundColor: getThemeColors().tooltipBg,
-              titleColor: getThemeColors().tooltipTitle,
-              bodyColor: getThemeColors().tooltipBody,
-              footerColor: getThemeColors().tooltipTitle,
-              borderColor: getThemeColors().tooltipBorder,
+              backgroundColor: theme.tooltipBg,
+              titleColor: theme.tooltipTitle,
+              bodyColor: theme.tooltipBody,
+              footerColor: theme.tooltipTitle,
+              borderColor: theme.tooltipBorder,
               borderWidth: 1,
             },
           },
           scales: {
             x: {
               type: 'time',
-              time: { unit: 'month', displayFormats: { month: 'MMM yyyy' } },
-              grid: { color: getThemeColors().gridX },
-              ticks: { color: getThemeColors().tick, maxRotation: 45 },
+              time: timeAxis(),
+              grid: { color: theme.grid },
+              border: { display: false },
+              ticks: { color: theme.tick, maxRotation: 0, autoSkipPadding: 16 },
               stacked: true,
             },
             y: {
               stacked: true,
-              grid: { color: getThemeColors().gridY },
+              grid: { color: theme.grid },
+              border: { display: false },
               ticks: {
-                color: getThemeColors().tick,
+                color: theme.tick,
                 callback: function(v) {
                   if (v >= 1000) return (v / 1000).toFixed(0) + 'k';
                   return v;
                 },
               },
-              title: { display: true, text: 'Candidates in Pool', color: getThemeColors().axisTitle },
+              title: { display: true, text: 'Candidates in the pool', color: theme.axisTitle },
             },
           },
         },
@@ -1499,57 +1432,37 @@ function main() {
       return distRangeLabels[idx];
     }
 
-    // Pool position info when user enters score
+    // Pool position when the user enters a score
     function updatePoolPosition(score) {
       const el = document.getElementById('poolPosition');
-      if (!score || score <= 0 || !distributionSnapshots.length) {
-        el.style.display = 'none';
+      const latest = getLatestDistribution();
+      if (!score || score <= 0 || !latest) {
+        el.innerHTML = '';
         return;
       }
 
-      const latest = getLatestDistribution();
-      if (!latest) { el.style.display = 'none'; return; }
-
-      // Count people at or above user's score
-      const rangeOrder = distRangeLabels;
-      const userIdx = getScoreRangeIndex(score);
-      let above = 0;
-      for (let i = 0; i < userIdx; i++) {
-        above += latest.ranges[rangeOrder[i]] || 0;
-      }
-      // For the user's own range, estimate roughly half are above
-      const inRange = latest.ranges[rangeOrder[userIdx]] || 0;
-      above += Math.round(inRange * 0.5);
-
+      const abovePool = countAboveScore(latest, score);
       const total = latest.total;
-      const percentile = total > 0 ? ((1 - above / total) * 100).toFixed(1) : '0';
-      const topPct = total > 0 ? ((above / total) * 100).toFixed(1) : '0';
+      const topPct = total > 0 ? ((abovePool / total) * 100).toFixed(1) : '0';
 
-      let colorClass = 'good';
-      if (parseFloat(topPct) > 50) colorClass = 'bad';
-      else if (parseFloat(topPct) > 25) colorClass = 'warn';
-
-      // Competition ratio: candidates above you vs typical invitation size
-      // Use median of last 10 General rounds as reference invitation size
+      // Typical round size: median invitations over the 10 most recent rounds
       const allRoundsFlat = originalDatasets.flatMap(ds => ds.data)
         .filter(d => d.invitations > 0)
         .sort((a, b) => new Date(a.x).getTime() - new Date(b.x).getTime());
-      const recentInv = allRoundsFlat.slice(-10).map(d => d.invitations).sort((a, b) => a - b);
-      const medInv = recentInv.length > 0 ? recentInv[Math.floor(recentInv.length / 2)] : 0;
-
-      // Use pool-aware count (with proportional estimation within ranges)
-      const abovePool = countAboveScore(latest, score);
+      const medInv = median(allRoundsFlat.slice(-10).map(d => d.invitations));
       const compRatio = medInv > 0 ? (abovePool / medInv) : 0;
-      const compStr = compRatio.toFixed(1) + ':1';
-      let compClass = 'good';
-      if (compRatio > 5) compClass = 'bad';
-      else if (compRatio > 2) compClass = 'warn';
 
-      el.style.display = 'contents';
+      const chip = (label, value, title) =>
+        '<div class="pool-chip" title="' + title + '"><div class="chip-label">' + label +
+        '</div><div class="chip-val">' + value + '</div></div>';
+
       el.innerHTML =
-        '<div class="pool-chip" title="Candidates with CRS scores above yours in the pool"><div class="chip-label">Above you</div><div class="chip-val ' + colorClass + '">' + abovePool.toLocaleString() + '</div></div>' +
-        '<div class="pool-chip" title="Candidates above your score / typical invitations per round (' + medInv.toLocaleString() + '). Below 1:1 = likely invited."><div class="chip-label">Competition</div><div class="chip-val ' + compClass + '">' + compStr + '</div></div>' +
-        '<div class="pool-chip" title="Your position in the pool of ' + total.toLocaleString() + ' candidates"><div class="chip-label">Percentile</div><div class="chip-val ' + colorClass + '">Top ' + topPct + '%</div></div>';
+        chip('Ahead of you in the pool', abovePool.toLocaleString(),
+          'Candidates with a CRS score above yours in the latest pool count (' + fmtDate(latest.date) + ')') +
+        chip('Rounds’ worth ahead', compRatio.toFixed(1) + '&times;',
+          'Candidates ahead of you divided by a typical round (' + medInv.toLocaleString() + ' invitations, median of the last 10). Below 1 means one typical round would reach you.') +
+        chip('Your place', 'Top ' + topPct + '%',
+          'Share of the ' + total.toLocaleString() + ' candidates in the pool with a higher score');
     }
 
     // Wire up score and time range changes to distribution chart
