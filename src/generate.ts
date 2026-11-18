@@ -1223,6 +1223,8 @@ function main() {
         data: { datasets },
         plugins: [youPlugin],
         options: {
+          // Room for the YOU dot at the right edge
+          layout: { padding: { right: 7 } },
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },

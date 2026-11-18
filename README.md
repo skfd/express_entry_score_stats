@@ -6,9 +6,9 @@ Visualize historical CRS cutoff scores for all Canada Express Entry invitation r
 
 - All 394+ rounds fetched from the [official IRCC JSON endpoint](https://www.canada.ca/content/dam/ircc/documents/json/ee_rounds_123_en.json) (source: [Express Entry rounds page](https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html)).
 - Separate series for each program: General, PNP, CEC, French, Healthcare, STEM, and more, grouped into main programs, occupation categories and newer categories. Circle size shows how many invitations a round issued.
-- Enter your CRS score to see a reference line, how many of each program's last 10 cutoffs it met, and where it sits in the candidate pool.
-- Filter to the last 3 years for a focused view.
-- Toggle individual programs on and off, or show one family at a time.
+- Enter your CRS score to see a reference line (circles near it are nudged to the side they fall on) and an arrow at your place in the candidate pool.
+- Show the last year, the last 3 years or all time. Phones start on the last year, larger screens on 3 years.
+- Starts on the main programs. Tap programs to add or remove them, or show all of them.
 - All settings persist in the URL. Bookmark any configuration.
 - Auto-updates daily via GitHub Actions.
 
