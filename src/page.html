@@ -950,8 +950,16 @@ const DATA = /*PAGE_DATA*/null;
     apply();
   });
   // A guess is there to be typed over
-  input.addEventListener('focus', () => { if (st.guess) input.select(); });
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+  // (on click as well: a mouse press puts the caret down after focus has selected)
+  const pick = () => { if (st.guess) input.select(); };
+  input.addEventListener('focus', pick);
+  input.addEventListener('click', pick);
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    // Enter on the untouched guess says "yes, that is me"
+    if (st.guess) { st.guess = false; apply(); }
+    input.blur();
+  });
 
   function apply(animate) {
     for (const b of rangesEl.children) b.setAttribute('aria-pressed', String(b.dataset.range === st.range));
