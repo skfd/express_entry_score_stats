@@ -75,9 +75,7 @@
   .pt { fill: var(--c); fill-opacity: .5; stroke: var(--c); stroke-width: 1.5; transition: fill .2s, fill-opacity .2s; }
   .pt.in { fill-opacity: .92; }
   .pt.out { fill: var(--page); fill-opacity: .85; }
-  .ends line { stroke: var(--c); stroke-width: 1; opacity: .5; }
-  .ends circle { fill: var(--c); stroke: var(--c); stroke-width: 1.5; }
-  .ends circle.out { fill: var(--page); }
+  .ends line { stroke: var(--c); stroke-width: 1.5; opacity: .55; }
   .ends text { paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round; }
   .ends .num { fill: var(--ink); font-size: 13px; font-weight: 700; }
   .ends .nm { fill: var(--muted); font-size: 10px; }
@@ -479,13 +477,12 @@ const DATA = /*LAB_DATA*/null;
     const x = L.plotR;
     let s = '';
     for (const it of items) {
-      const cleared = st.score == null || it.last.s <= st.score;
       const fromX = Math.min(X(it.last.t) + it.last.r + 2, x + 2);
       s += '<g style="--c:' + colorOf(it.p) + '">' +
-        '<line x1="' + fromX.toFixed(1) + '" y1="' + it.y.toFixed(1) + '" x2="' + (x + 6) + '" y2="' + it.ly.toFixed(1) + '"/>' +
-        '<circle' + (cleared ? '' : ' class="out"') + ' cx="' + (x + 11) + '" cy="' + it.ly.toFixed(1) + '" r="3.5"/>' +
-        '<text class="num" x="' + (x + 19) + '" y="' + (it.ly + 4.5).toFixed(1) + '">' + it.last.s + '</text>' +
-        '<text class="nm" x="' + (x + 19) + '" y="' + (it.ly + 15.5).toFixed(1) + '">' + esc(it.p.short) + '</text>' +
+        // A plain leader, no marker: a dot here would read as one more round
+        '<line x1="' + fromX.toFixed(1) + '" y1="' + it.y.toFixed(1) + '" x2="' + (x + 9) + '" y2="' + it.ly.toFixed(1) + '"/>' +
+        '<text class="num" x="' + (x + 13) + '" y="' + (it.ly + 4.5).toFixed(1) + '">' + it.last.s + '</text>' +
+        '<text class="nm" x="' + (x + 13) + '" y="' + (it.ly + 15.5).toFixed(1) + '">' + esc(it.p.short) + '</text>' +
         '</g>';
     }
     gEnds.innerHTML = s;
