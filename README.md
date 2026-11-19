@@ -11,6 +11,7 @@ Visualize historical CRS cutoff scores for all Canada Express Entry invitation r
 - Show the last year, the last 3 years or all time. Phones start on the last year, larger screens on 3 years.
 - Starts on the main programs. Tap programs to add or remove them, or show all of them.
 - All settings persist in the URL. Bookmark any configuration.
+- A shared link unfurls into a card with the past year's cutoffs and the latest draw, redrawn on every build (`dist/og.png`).
 - Auto-updates daily via GitHub Actions.
 
 ## Usage
