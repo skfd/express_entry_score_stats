@@ -140,9 +140,24 @@
     display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center;
     max-width: 640px; padding: 0 16px; font-size: 13px; font-variant-numeric: tabular-nums;
   }
+  .years { align-items: start; }
   .years .y { color: var(--muted); }
+  .years .track { display: grid; gap: 3px; padding-top: 4px; }
   .years i { display: block; height: 10px; min-width: 2px; border-radius: 3px; background: var(--pool-strong); transition: width .4s cubic-bezier(.3, 1.3, .5, 1); }
-  .years b { font-weight: 700; text-align: right; }
+  /* Hollow and dashed: an estimate, not a count */
+  .years i.est { background: none; border: 1.5px dashed var(--muted); }
+  .years .nums { display: grid; text-align: right; }
+  .years b { font-weight: 700; }
+  .years .nums span { color: var(--muted); font-size: 12px; }
+  .info { max-width: 60ch; margin: -4px 0 12px; padding: 0 16px; color: var(--muted); font-size: 13px; }
+  .info summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; list-style: none; text-decoration: underline; }
+  .info summary::-webkit-details-marker { display: none; }
+  .info summary::before {
+    content: 'i'; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+    border: 1.5px solid currentColor; font: italic 700 12px/1 Georgia, 'Times New Roman', serif; text-decoration: none;
+  }
+  .info p { margin: 4px 0 8px; }
+  .info a { color: inherit; }
   @media (prefers-reduced-motion: reduce) { .years i { transition: none; } }
 
   footer { padding: 20px 16px 32px; color: var(--muted); font-size: 12px; }
@@ -183,6 +198,13 @@
     <div>
       <h2>Invitations per year</h2>
       <p class="sub" id="yearsSub"></p>
+      <details class="info" id="leftInfo">
+        <summary>How the hollow bars are estimated</summary>
+        <p>Nobody publishes how many temporary residents left Canada without permanent residence, so this is worked out from two sources.</p>
+        <p>Statistics Canada estimates how many people stopped being non-permanent residents each quarter (<a href="https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710004001">table 17-10-0040-01</a>, &ldquo;outflows&rdquo;). That figure includes people who stayed and became permanent residents, so <a href="https://open.canada.ca/data/en/dataset/1b026aab-edb3-4d5d-8231-270a09ed4e82">IRCC&rsquo;s counts</a> of new permanent residents who had held a study or work permit are taken off.</p>
+        <p>What is left is rough. It still includes asylum claimants who became permanent residents and people who lost status without leaving. IRCC&rsquo;s figures are rounded and one person can appear under two kinds of permit. Statistics Canada revises its outflows, sometimes by a lot, and the latest year most of all.</p>
+        <p>It covers every temporary resident in Canada, not Express Entry candidates, and it does not change with the programs switched on. It starts in 2022. <span id="leftAsOf"></span></p>
+      </details>
       <div class="years" id="years"></div>
     </div>
   </section>
@@ -796,13 +818,33 @@ const DATA = /*LAB_DATA*/null;
   // Invitations per year: every year, whatever the range, for the programs switched on
   const yearsEl = document.getElementById('years');
   const yearRows = [];
+  const left = {};
+  ((DATA.leftWithoutPr || {}).years || []).forEach(r => { left[r.year] = r; });
+  const approx = n => '\u2248' + nf.format(Math.round(n / 1000) * 1000);
   for (let y = new Date(tMin).getUTCFullYear(), end = new Date(tMax).getUTCFullYear(); y <= end; y++) {
-    const label = document.createElement('span'), track = document.createElement('span'), num = document.createElement('b');
+    const label = document.createElement('span'), track = document.createElement('span'), nums = document.createElement('span');
     label.className = 'y';
     label.textContent = y === end ? y + ' so far' : y;
+    track.className = 'track';
+    nums.className = 'nums';
     const bar = track.appendChild(document.createElement('i'));
-    yearsEl.append(label, track, num);
-    yearRows.push({ y: y, bar: bar, num: num });
+    const num = nums.appendChild(document.createElement('b'));
+    const row = { y: y, bar: bar, num: num, est: null };
+    if (left[y]) {
+      row.est = track.appendChild(document.createElement('i'));
+      row.est.className = 'est';
+      const n = nums.appendChild(document.createElement('span'));
+      n.textContent = approx(left[y].estimate) + ' left' + (left[y].months < 12 ? ', Jan\u2013' + MONTHS[left[y].months - 1] : '');
+      n.title = 'Estimate: temporary residents who left without permanent residence';
+    }
+    yearsEl.append(label, track, nums);
+    yearRows.push(row);
+  }
+  const hasLeft = yearRows.some(r => r.est);
+  if (hasLeft) {
+    document.getElementById('leftAsOf').textContent = 'Figures retrieved ' + df.format(Date.parse(DATA.leftWithoutPr.retrieved)) + '; they do not update daily.';
+  } else {
+    document.getElementById('leftInfo').hidden = true;
   }
   function years() {
     const sums = {};
@@ -812,15 +854,18 @@ const DATA = /*LAB_DATA*/null;
       picked++;
       for (const pt of p.pts) { const y = new Date(pt.t).getUTCFullYear(); sums[y] = (sums[y] || 0) + pt.n; }
     }
-    for (const r of yearRows) most = Math.max(most, sums[r.y] || 0);
+    // One scale for both bars, so a year's invitations and departures compare by length
+    for (const r of yearRows) most = Math.max(most, sums[r.y] || 0, r.est ? left[r.y].estimate : 0);
     for (const r of yearRows) {
       const n = sums[r.y] || 0;
       r.bar.style.width = (most ? n / most * 100 : 0) + '%';
       r.num.textContent = nf.format(n);
+      if (r.est) r.est.style.width = (left[r.y].estimate / most * 100) + '%';
     }
-    document.getElementById('yearsSub').textContent = picked === programs.length
-      ? 'Invitations issued across all programs.'
-      : 'Invitations issued in the ' + picked + ' of ' + programs.length + ' programs switched on above.';
+    document.getElementById('yearsSub').textContent = (picked === programs.length
+      ? 'Solid bars: invitations issued across all programs.'
+      : 'Solid bars: invitations issued in the ' + picked + ' of ' + programs.length + ' programs switched on above.') +
+      (hasLeft ? ' Hollow bars: temporary residents who left Canada without permanent residence, a rough estimate.' : '');
   }
 
   input.value = st.score != null ? st.score : '';

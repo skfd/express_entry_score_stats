@@ -15,6 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
 const DATA_FILE = join(ROOT, "src", "data", "rounds.json");
 const OUT_DIR = join(ROOT, "dist", "lab");
+const LEFT_FILE = join(__dirname, "left-without-pr.json");
 const DATA_TOKEN = "/*LAB_DATA*/null";
 
 const EXPERIMENTS = [
@@ -228,6 +229,9 @@ function buildData(data: DrawData) {
     programs,
     pool,
     poolHistory,
+    // Not IRCC rounds data: a yearly estimate from two other sources, kept as
+    // a static snapshot beside this file (it says how it was worked out).
+    leftWithoutPr: JSON.parse(readFileSync(LEFT_FILE, "utf-8")),
   };
 }
 
