@@ -121,6 +121,7 @@
   .chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px var(--c); }
   .chip[aria-pressed="false"] { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--faint); border-radius: 10px; }
   .chip[aria-pressed="false"] i { background: transparent; }
+  .chip[hidden], .fam[hidden] { display: none; }
   .link { padding: 8px 4px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
   @media (prefers-reduced-motion: reduce) { .seg button, .chip, .series, .pt { transition: none; } }
 
@@ -283,9 +284,10 @@ const DATA = /*LAB_DATA*/null;
   const X = t => 6 + (t - cur.x0) / (cur.x1 - cur.x0) * (L.plotR - 22);
   const Y = s => L.bottom - (s - cur.y0) / (cur.y1 - cur.y0) * (L.bottom - L.top);
 
+  const rangeStart = () => st.range === '1y' ? tMax - 365 * DAY : st.range === '3y' ? tMax - 3 * 365 * DAY : tMin;
+
   function target() {
-    const span = st.range === '1y' ? 365 * DAY : st.range === '3y' ? 3 * 365 * DAY : tMax - tMin;
-    const x1 = tMax, x0 = tMax - span;
+    const x1 = tMax, x0 = rangeStart();
     let lo = Infinity, hi = -Infinity;
     for (const p of programs) {
       if (!st.on.has(p.slug)) continue;
@@ -566,7 +568,7 @@ const DATA = /*LAB_DATA*/null;
         (pool ? ' About <b>' + nf.format(Math.round(ahead(st.score))) + '</b> of ' + nf.format(pool.total) +
           ' candidates in the pool are ahead of you.' : '');
     }
-    const latest = programs.filter(p => st.on.has(p.slug)).map(p => {
+    const latest = programs.filter(p => st.on.has(p.slug) && p.inRange).map(p => {
       const l = p.pts[p.pts.length - 1];
       return p.label + ' ' + l.s + ' on ' + df.format(l.t);
     });
@@ -593,6 +595,7 @@ const DATA = /*LAB_DATA*/null;
 
   programsEl.style.display = 'grid';
   programsEl.style.gap = '12px';
+  const famRows = [];
   for (const fam of DATA.families) {
     const members = programs.filter(p => p.family === fam.id);
     if (!members.length) continue;
@@ -610,6 +613,7 @@ const DATA = /*LAB_DATA*/null;
       p.chip.title = p.label;
     }
     programsEl.appendChild(row);
+    famRows.push({ el: row, members: members });
   }
   const quick = document.createElement('div');
   quick.className = 'fam';
@@ -631,12 +635,19 @@ const DATA = /*LAB_DATA*/null;
 
   function apply(animate) {
     for (const b of rangesEl.children) b.setAttribute('aria-pressed', String(b.dataset.range === st.range));
+    // A program with no round in the chosen range has nothing to switch on or
+    // off, so its chip goes away. The choice itself is kept, and comes back
+    // with the chip when the range reaches that program's rounds again.
+    const from = rangeStart();
     for (const p of programs) {
       const on = st.on.has(p.slug);
+      p.inRange = p.pts[p.pts.length - 1].t >= from;
+      p.chip.hidden = !p.inRange;
       p.g.classList.toggle('off', !on);
       p.chip.setAttribute('aria-pressed', String(on));
       p.chip.style.setProperty('--c', colorOf(p));
     }
+    for (const row of famRows) row.el.hidden = !row.members.some(p => p.inRange);
     writeUrl();
     words();
     go(animate !== false);
