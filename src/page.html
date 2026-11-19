@@ -13,15 +13,22 @@
     thickest line, the only pill on the chart.
   */
   :root {
-    color-scheme: light dark;
+    color-scheme: light;
     --page: #f9f9f7; --ink: #0b0b0b; --muted: #6f6d68; --faint: #e4e3dc;
     --grid: #e6e5de; --chip: #eeede7; --pool: #d9d8d0; --pool-strong: #9d9c94;
   }
+  /* The page follows the system; data-theme is set only while the footer switch overrides it. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
       --page: #0d0d0d; --ink: #f0efec; --muted: #98968f; --faint: #2c2c2a;
       --grid: #232321; --chip: #1f1f1e; --pool: #333331; --pool-strong: #75746e;
     }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --ink: #f0efec; --muted: #98968f; --faint: #2c2c2a;
+    --grid: #232321; --chip: #1f1f1e; --pool: #333331; --pool-strong: #75746e;
   }
   * { box-sizing: border-box; }
   body {
@@ -161,6 +168,18 @@
   @media (prefers-reduced-motion: reduce) { .years i { transition: none; } }
 
   footer { padding: 20px 16px 32px; color: var(--muted); font-size: 12px; }
+  /* Kept quiet: the page already follows the reader's system, so few will need it. */
+  .theme {
+    display: flex; align-items: center; gap: 7px; min-height: 32px; margin-top: 6px; padding: 0;
+    border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+  }
+  .theme i { position: relative; width: 22px; height: 12px; border: 1px solid currentColor; border-radius: 999px; }
+  .theme i::after {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor; transition: transform .2s;
+  }
+  .theme[aria-checked="true"] i::after { transform: translateX(10px); }
+  @media (prefers-reduced-motion: reduce) { .theme i::after { transition: none; } }
 </style>
 </head>
 <body>
@@ -209,7 +228,10 @@
     </div>
   </section>
 
-  <footer id="footer"></footer>
+  <footer>
+    <div id="footer"></div>
+    <button class="theme" id="theme" type="button" role="switch" aria-checked="false"><i></i>Dark theme</button>
+  </footer>
 </div>
 
 <script>
@@ -339,7 +361,11 @@ const DATA = /*PAGE_DATA*/null;
     // Big circles first, so a small round is never buried under a large one
     p.pts.slice().sort((a, b) => b.r - a.r).forEach(pt => { pt.el = el('circle', { class: 'pt', r: pt.r.toFixed(1) }, p.g); });
   }
-  const colorOf = p => darkQ.matches ? p.dark : p.light;
+  // Every load follows the system. The footer switch flips to the other theme
+  // for this visit only: nothing is stored, and a system change takes over again.
+  let flipped = false;
+  const isDark = () => darkQ.matches !== flipped;
+  const colorOf = p => isDark() ? p.dark : p.light;
   function paint() { for (const p of programs) p.g.style.setProperty('--c', colorOf(p)); }
   paint();
 
@@ -912,7 +938,16 @@ const DATA = /*PAGE_DATA*/null;
       '. This does not constitute an endorsement by Statistics Canada of this product. ' : '') +
     '<a href="' + (DATA.beta ? '../' : '') + 'lab/">Lab</a> &middot; <a href="https://github.com/skfd/express_entry_score_stats">GitHub</a>';
 
-  darkQ.addEventListener('change', () => { paint(); apply(false); });
+  const themeBtn = document.getElementById('theme');
+  function theme() {
+    if (flipped) document.documentElement.dataset.theme = isDark() ? 'dark' : 'light';
+    else delete document.documentElement.dataset.theme;
+    themeBtn.setAttribute('aria-checked', String(isDark()));
+    paint();
+  }
+  themeBtn.addEventListener('click', () => { flipped = !flipped; theme(); apply(false); });
+  darkQ.addEventListener('change', () => { flipped = false; theme(); apply(false); });
+  theme();
   new ResizeObserver(() => { layout(); if (cur) go(false); }).observe(chartEl);
 
   layout();
