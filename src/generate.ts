@@ -84,7 +84,12 @@ function main() {
 
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(OUTPUT_FILE, html, "utf-8");
-  writeFileSync(join(OUTPUT_DIR, "og.png"), previewPng(pageData));
+  // The page is already written: a card that fails to draw must not stop the deploy.
+  try {
+    writeFileSync(join(OUTPUT_DIR, "og.png"), previewPng(pageData));
+  } catch (err) {
+    console.error("::warning::Link preview og.png not drawn:", err);
+  }
   console.log(`Generated ${OUTPUT_FILE}${BETA ? " (beta preview)" : ""}: ${data.rounds.length} rounds`);
 }
 

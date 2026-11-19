@@ -4,6 +4,8 @@
  * as the page, so it always carries the latest draw.
  */
 import { Resvg } from "@resvg/resvg-js";
+import { createRequire } from "module";
+import { dirname, join } from "path";
 import type { buildData } from "./page-data.js";
 
 type PageData = ReturnType<typeof buildData>;
@@ -15,8 +17,11 @@ const PAGE = "#f9f9f7";
 const INK = "#0b0b0b";
 const MUTED = "#6f6d68";
 const GRID = "#e6e5de";
-// The first one installed wins: Segoe UI locally on Windows, Liberation Sans on the CI runner.
-const FONT = "Segoe UI, Liberation Sans, Arial, DejaVu Sans, sans-serif";
+// A bundled font, not a system one: resvg silently drops text it has no font
+// for, and the card is drawn on whatever CI runner the build lands on.
+const FONT = "Inter";
+const FONT_DIR = join(dirname(createRequire(import.meta.url).resolve("@expo-google-fonts/inter/package.json")));
+const FONT_FILES = ["400Regular", "800ExtraBold"].map((w) => join(FONT_DIR, w, `Inter_${w}.ttf`));
 /** How far back the card's chart reaches. */
 const SPAN_MS = 365 * 24 * 3600 * 1000;
 
@@ -117,7 +122,7 @@ ${ring}
 
 export function previewPng(data: PageData): Buffer {
   const resvg = new Resvg(previewSvg(data), {
-    font: { loadSystemFonts: true, defaultFontFamily: "Liberation Sans" },
+    font: { loadSystemFonts: false, fontFiles: FONT_FILES, defaultFontFamily: FONT },
     fitTo: { mode: "width", value: WIDTH },
   });
   return resvg.render().asPng();
