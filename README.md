@@ -47,6 +47,17 @@ The preview uses the same daily data, is not indexed by search engines and has n
 analytics. Each deploy of `main` rebuilds it, so it stays up until the `beta`
 branch is deleted.
 
+### Lab
+
+Design experiments live at `/lab/` (https://skfd.github.io/express_entry_score_stats/lab/),
+one page each, built from the same daily data. They are not indexed, have no
+analytics and do not touch the live page. An experiment is a static HTML template
+in `src/lab/`; `npm run lab` embeds the data and writes it to `dist/lab/<name>/`.
+
+- `expressive` applies the principles behind Material 3 Expressive (not its look):
+  the chart is the page, the candidate pool is drawn along the same score axis,
+  and your score is the one thing in full contrast.
+
 ## Data Source
 
 All data—including historic CRS cutoff scores, invitation counts, and CRS score pool distribution snapshots—comes from the official IRCC (Immigration, Refugees and Citizenship Canada) JSON endpoint:

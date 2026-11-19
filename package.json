@@ -4,7 +4,8 @@
   "description": "Express Entry CRS score visualization",
   "scripts": {
     "download": "tsx src/download.ts",
-    "generate": "tsx src/generate.ts"
+    "generate": "tsx src/generate.ts",
+    "lab": "tsx src/lab/build.ts"
   },
   "keywords": [],
   "author": "",

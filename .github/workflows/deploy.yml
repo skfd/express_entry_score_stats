@@ -59,6 +59,12 @@ jobs:
       - name: Generate visualization
         run: npm run generate
 
+      # Design experiments, published under /lab/. An experiment that fails to
+      # build must not take the live page down with it.
+      - name: Build lab experiments
+        continue-on-error: true
+        run: npm run lab
+
       # Preview: the beta branch's generator, fed today's data, published at /beta/.
       # Only main may deploy to Pages, so pushes to beta re-run this workflow on
       # main (see beta.yml) instead of deploying themselves.

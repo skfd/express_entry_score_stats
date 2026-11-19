@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>[Lab] Expressive - Express Entry CRS cutoffs</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23f59e0b' d='M32 4L29 12l-4-2 2 7-8-4 2 6H14l5 5-7 3 8 3-3 7 6-3 1 7 4-5 2 8h4l2-8 4 5 1-7 6 3-3-7 8-3-7-3 5-5h-7l2-6-8 4 2-7-4 2z'/%3E%3Crect fill='%23f59e0b' x='29' y='46' width='6' height='14' rx='1'/%3E%3C/svg%3E">
+<style>
+  /*
+    Colour belongs to the data (one hue per program), so the page itself is
+    neutral and "you" is drawn in full-contrast ink: the heaviest type, the
+    thickest line, the only pill on the chart.
+  */
+  :root {
+    color-scheme: light dark;
+    --page: #f9f9f7; --ink: #0b0b0b; --muted: #6f6d68; --faint: #e4e3dc;
+    --grid: #e6e5de; --chip: #eeede7; --pool: #d9d8d0; --pool-strong: #9d9c94;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --ink: #f0efec; --muted: #98968f; --faint: #2c2c2a;
+      --grid: #232321; --chip: #1f1f1e; --pool: #333331; --pool-strong: #75746e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+
+  .top { padding: 12px 16px 8px; }
+  h1 { margin: 0; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  .lab {
+    display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px;
+    background: var(--ink); color: var(--page);
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  }
+  /* The score field is the YOU pill from the chart, grown large enough to type in. */
+  .you-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+  .you {
+    display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 10px 0 18px;
+    border-radius: 999px; background: var(--ink); color: var(--page); cursor: text;
+  }
+  .you:focus-within { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .you-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+  #score {
+    width: 3.4em; padding: 0; border: 0; background: none; color: inherit; caret-color: currentColor; outline: none;
+    font: 800 26px/1 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+  }
+  #score::placeholder { color: inherit; opacity: .55; font-size: 16px; font-weight: 600; letter-spacing: 0; }
+  .lede { flex: 1 1 220px; max-width: 52ch; margin: 0; color: var(--muted); font-size: 13.5px; }
+  .lede b { color: var(--ink); font-weight: 700; }
+  .key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink); vertical-align: -1px; }
+  .key.in { background: var(--ink); }
+
+  .chart { position: relative; height: clamp(380px, 62vh, 760px); height: clamp(380px, 62svh, 760px); }
+  svg { display: block; width: 100%; height: 100%; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+  svg text { font-family: inherit; font-variant-numeric: tabular-nums; }
+  .grid line { stroke: var(--grid); stroke-width: 1; }
+  .grid text, .hd { fill: var(--muted); font-size: 10.5px; }
+  .grid text { paint-order: stroke; stroke: var(--page); stroke-width: 3px; stroke-linejoin: round; }
+  .grid text.strong { font-weight: 700; }
+  .hd { font-weight: 700; letter-spacing: .08em; }
+  .pool rect { fill: var(--pool); }
+  .pool.ahead rect { fill: var(--pool-strong); }
+  .series { transition: opacity .25s; }
+  .series.off { opacity: 0; }
+  .ln { fill: none; stroke: var(--c); stroke-width: 1.5; stroke-linejoin: round; opacity: .55; }
+  .pt { fill: var(--c); fill-opacity: .5; stroke: var(--c); stroke-width: 1.5; transition: fill .2s, fill-opacity .2s; }
+  .pt.in { fill-opacity: .92; }
+  .pt.out { fill: var(--page); fill-opacity: .85; }
+  .ends line { stroke: var(--c); stroke-width: 1.5; opacity: .55; }
+  .ends text { paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round; }
+  .ends .num { fill: var(--ink); font-size: 13px; font-weight: 700; }
+  .ends .nm { fill: var(--muted); font-size: 10px; }
+  .you line { stroke: var(--ink); stroke-width: 2.5; }
+  .you .pill { fill: var(--ink); }
+  .you .pilltx { fill: var(--page); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+  .you .pilltx .yn { font-size: 13.5px; letter-spacing: 0; }
+  .you .ahead {
+    fill: var(--ink); font-size: 11.5px; font-weight: 700;
+    paint-order: stroke; stroke: var(--page); stroke-width: 4px; stroke-linejoin: round;
+  }
+  .ring { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
+
+  .pop {
+    position: absolute; z-index: 2; max-width: 230px; padding: 10px 13px 11px; border-radius: 16px;
+    background: var(--ink); color: var(--page); font-size: 12.5px; line-height: 1.35;
+    pointer-events: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+  }
+  .pop[hidden] { display: none; }
+  .pop .pk { font-weight: 700; }
+  .pop .pk i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; }
+  .pop .big { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .pop .vs { margin-top: 4px; font-weight: 700; }
+  .pop .ty { margin-top: 4px; opacity: .7; }
+
+  .controls { display: grid; gap: 14px; padding: 12px 16px 4px; }
+  .seg, .fam { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .fam-label {
+    flex: 0 0 100%; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .seg button, .chip {
+    min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--chip); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 600;
+    transition: border-radius .3s cubic-bezier(.3, 1.6, .5, 1), background .15s, color .15s;
+  }
+  @media (pointer: coarse) { .seg button, .chip { min-height: 44px; } }
+  /* Shape carries state too: what is switched on is a pill, what is off is a box. */
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); border-radius: 999px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 0 13px 0 10px; border-radius: 999px; }
+  .chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px var(--c); }
+  .chip[aria-pressed="false"] { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--faint); border-radius: 10px; }
+  .chip[aria-pressed="false"] i { background: transparent; }
+  .chip[hidden], .fam[hidden] { display: none; }
+  .link { padding: 8px 4px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .seg button, .chip, .series, .pt { transition: none; } }
+
+  /* Below the chart, for whoever scrolls: quiet on purpose. */
+  .more { display: grid; gap: 30px; padding-top: 30px; }
+  .more h2 { margin: 0; padding: 0 16px; font-size: 15px; font-weight: 700; }
+  .more .sub { max-width: 60ch; margin: 2px 0 10px; padding: 0 16px; color: var(--muted); font-size: 13px; }
+  .more .sub b { color: var(--ink); }
+  .hist { position: relative; height: 240px; }
+  /* Score bands are ordered, so they share one colour and differ in strength */
+  .hist .band { fill: var(--ink); stroke: var(--page); stroke-width: 1; stroke-linejoin: round; }
+  .hist .you-case { fill: none; stroke: var(--page); stroke-width: 6; stroke-linejoin: round; }
+  .hist .you-line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+  .pop .rows { display: grid; grid-template-columns: auto auto; gap: 0 14px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .pop .rows span:nth-child(even) { text-align: right; }
+  .pop .rows .me { font-weight: 800; }
+  .years {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center;
+    max-width: 640px; padding: 0 16px; font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .years { align-items: start; }
+  .years .y { color: var(--muted); }
+  .years .track { display: grid; gap: 3px; padding-top: 4px; }
+  .years i { display: block; height: 10px; min-width: 2px; border-radius: 3px; background: var(--pool-strong); transition: width .4s cubic-bezier(.3, 1.3, .5, 1); }
+  /* Hollow and dashed: an estimate, not a count */
+  .years i.est { background: none; border: 1.5px dashed var(--muted); }
+  .years .nums { display: grid; text-align: right; }
+  .years b { font-weight: 700; }
+  .years .nums span { color: var(--muted); font-size: 12px; }
+  .info { max-width: 60ch; margin: -4px 0 12px; padding: 0 16px; color: var(--muted); font-size: 13px; }
+  .info summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; list-style: none; text-decoration: underline; }
+  .info summary::-webkit-details-marker { display: none; }
+  .info summary::before {
+    content: 'i'; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+    border: 1.5px solid currentColor; font: italic 700 12px/1 Georgia, 'Times New Roman', serif; text-decoration: none;
+  }
+  .info p { margin: 4px 0 8px; }
+  .info a { color: inherit; }
+  @media (prefers-reduced-motion: reduce) { .years i { transition: none; } }
+
+  footer { padding: 20px 16px 32px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1><span class="lab">Lab</span>Canada Express Entry &middot; CRS cutoffs &middot; <a href="../../">live page</a></h1>
+  </header>
+
+  <div class="chart" id="chart">
+    <svg id="svg" role="img"></svg>
+    <div class="pop" id="pop" hidden></div>
+  </div>
+
+  <section class="controls">
+    <div class="you-row">
+      <label class="you">
+        <span class="you-label">Your CRS score</span>
+        <input id="score" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="e.g. 480" autocomplete="off">
+      </label>
+      <p class="lede" id="lede"></p>
+    </div>
+    <div class="seg" id="ranges" role="group" aria-label="Time range"></div>
+    <div id="programs" role="group" aria-label="Programs"></div>
+  </section>
+
+  <section class="more">
+    <div id="histBlock">
+      <h2>Pool over time</h2>
+      <p class="sub" id="histSub"></p>
+      <div class="hist" id="hist">
+        <svg id="histSvg" role="img" aria-label="Candidates in the Express Entry pool at each snapshot"></svg>
+        <div class="pop" id="histPop" hidden></div>
+      </div>
+    </div>
+    <div>
+      <h2>Invitations per year</h2>
+      <p class="sub" id="yearsSub"></p>
+      <details class="info" id="leftInfo">
+        <summary>How the hollow bars are estimated</summary>
+        <p>Nobody publishes how many temporary residents left Canada without permanent residence, so this is worked out from two sources.</p>
+        <p>Statistics Canada estimates how many people stopped being non-permanent residents each quarter (<a href="https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710004001">table 17-10-0040-01</a>, &ldquo;outflows&rdquo;). That figure includes people who stayed and became permanent residents, so <a href="https://open.canada.ca/data/en/dataset/1b026aab-edb3-4d5d-8231-270a09ed4e82">IRCC&rsquo;s counts</a> of new permanent residents who had held a study or work permit are taken off.</p>
+        <p>What is left is rough, and probably too high. It still includes asylum claimants who became permanent residents and people who lost status without leaving, and IRCC leaves out any count under five. Statistics Canada also revises its outflows, sometimes by a lot, and the latest year most of all. That is why the figures are rounded to the nearest 10,000.</p>
+        <p>It covers every temporary resident in Canada, not Express Entry candidates, and it does not change with the programs switched on. It starts in 2022. <span id="leftAsOf"></span></p>
+      </details>
+      <div class="years" id="years"></div>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = /*LAB_DATA*/null;
+
+(function () {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const DAY = 864e5;
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const RANGES = [['1y', 'Last year'], ['3y', 'Last 3 years'], ['all', 'All time']];
+
+  const darkQ = matchMedia('(prefers-color-scheme: dark)');
+  const reduceQ = matchMedia('(prefers-reduced-motion: reduce)');
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const DEFAULT_RANGE = innerWidth < 600 ? '1y' : '3y';
+
+  const nf = new Intl.NumberFormat('en-CA');
+  const df = new Intl.DateTimeFormat('en-CA', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const compact = n => n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace('.0', '') + 'k' : String(Math.round(n));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  // Circle area is proportional to invitations issued (7,000 invitations = radius 12)
+  const radius = n => clamp(12 * Math.sqrt(Math.max(0, n) / 7000), 2, 18);
+
+  // ---- Data ----------------------------------------------------------------
+  const programs = DATA.programs;
+  let tMin = Infinity, tMax = -Infinity;
+  for (const p of programs) {
+    p.pts = p.rounds.map(r => ({ t: r[0], s: r[1], n: r[2], no: r[3], type: r[4], r: radius(r[2]), p: p, state: -1 }));
+    for (const pt of p.pts) { tMin = Math.min(tMin, pt.t); tMax = Math.max(tMax, pt.t); }
+  }
+  const pool = DATA.pool;
+  let maxDensity = 0;
+  if (pool) for (const b of pool.bins) { b.d = b.n / (b.hi - b.lo + 1); maxDensity = Math.max(maxDensity, b.d); }
+
+  /** Candidates strictly above a score, spreading each bin evenly over its range. */
+  function aheadIn(counts, score) {
+    let n = 0;
+    pool.bins.forEach((b, i) => {
+      if (score < b.lo) n += counts[i];
+      else if (score < b.hi) n += counts[i] * (b.hi - score) / (b.hi - b.lo + 1);
+    });
+    return n;
+  }
+  const poolNow = pool ? pool.bins.map(b => b.n) : [];
+  const ahead = score => aheadIn(poolNow, score);
+  // The pool chart shows your score band and the bands above it (all of them with no score)
+  const shownFrom = () => st.score == null ? 0 : Math.max(0, pool.bins.findIndex(b => st.score >= b.lo && st.score <= b.hi));
+  const shownSum = (h, from) => { let n = 0; for (let i = from; i < h.n.length; i++) n += h.n[i]; return n; };
+  // Every snapshot IRCC published, oldest first
+  const hist = pool ? (DATA.poolHistory || []).map(r => ({ t: r[0], total: r[1], n: r.slice(2) })) : [];
+
+  // ---- State (kept in the URL, same parameters as the main page) -------------
+  const slugs = programs.map(p => p.slug);
+  const mainSlugs = programs.filter(p => p.family === 'main').map(p => p.slug);
+  const parseScore = v => { const n = parseInt(v, 10); return n >= 100 && n <= 1200 ? n : null; };
+  const q = new URLSearchParams(location.search);
+  const st = {
+    range: RANGES.some(r => r[0] === q.get('range')) ? q.get('range') : DEFAULT_RANGE,
+    score: parseScore(q.get('score')),
+    on: new Set(),
+  };
+  if (q.get('programs') === 'all') slugs.forEach(s => st.on.add(s));
+  else (q.get('programs') || '').split(',').forEach(s => { if (slugs.includes(s)) st.on.add(s); });
+  if (!st.on.size) mainSlugs.forEach(s => st.on.add(s));
+
+  function writeUrl() {
+    const p = new URLSearchParams();
+    if (st.score != null) p.set('score', st.score);
+    if (st.range !== DEFAULT_RANGE) p.set('range', st.range);
+    const on = slugs.filter(s => st.on.has(s));
+    if (on.length === slugs.length) p.set('programs', 'all');
+    else if (on.join() !== mainSlugs.join()) p.set('programs', on.join(','));
+    const qs = p.toString();
+    try { history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '')); } catch (e) { /* file:// */ }
+  }
+
+  // ---- SVG scaffolding --------------------------------------------------------
+  const chartEl = document.getElementById('chart');
+  const svg = document.getElementById('svg');
+  const pop = document.getElementById('pop');
+  function el(name, attrs, parent) {
+    const e = document.createElementNS(NS, name);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const defs = el('defs', {}, svg);
+  const clipPlotRect = el('rect', {}, el('clipPath', { id: 'clipPlot' }, defs));
+  const clipAheadRect = el('rect', {}, el('clipPath', { id: 'clipAhead' }, defs));
+  const gGrid = el('g', { class: 'grid' }, svg);
+  const gPool = el('g', { class: 'pool' }, svg);
+  const gPoolAhead = el('g', { class: 'pool ahead', 'clip-path': 'url(#clipAhead)' }, svg);
+  const gSeries = el('g', { 'clip-path': 'url(#clipPlot)' }, svg);
+  const gLabels = el('g', { class: 'grid' }, svg); // axis numbers stay readable over the circles
+  const gHead = el('g', {}, svg);
+  const gYou = el('g', { class: 'you' }, svg);
+  const youLine = el('line', {}, gYou);
+  const youPill = el('rect', { class: 'pill', height: 24, rx: 12 }, gYou);
+  const youPillTx = el('text', { class: 'pilltx', 'text-anchor': 'middle' }, gYou);
+  const youAhead = el('text', { class: 'ahead', 'text-anchor': 'end' }, gYou);
+  const gEnds = el('g', { class: 'ends' }, svg); // above the YOU line, so it never strikes a label through
+  const ring = el('circle', { class: 'ring', r: 0 }, svg);
+
+  const histEl = document.getElementById('hist');
+  const histSvg = document.getElementById('histSvg');
+  const histPop = document.getElementById('histPop');
+  const HIST_H = 240;
+  const clipHistRect = el('rect', {}, el('clipPath', { id: 'clipHist' }, el('defs', {}, histSvg)));
+  const hGrid = el('g', { class: 'grid' }, histSvg);
+  const hClip = el('g', { 'clip-path': 'url(#clipHist)' }, histSvg);
+  const hBands = pool ? pool.bins.map(() => el('path', { class: 'band' }, hClip)) : [];
+  const hYou = el('g', {}, hClip);
+  const hYouCase = el('path', { class: 'you-case' }, hYou);
+  const hYouLine = el('path', { class: 'you-line' }, hYou);
+  histSvg.appendChild(hGrid); // axis numbers over the filled areas, not under them
+  const hEnds = el('g', { class: 'ends', style: '--c: var(--muted)' }, histSvg);
+  const hRing = el('circle', { class: 'ring', r: 0 }, histSvg);
+  if (!hist.length) document.getElementById('histBlock').hidden = true;
+
+  const poolRects = pool ? pool.bins.map(() => [el('rect', { rx: 2 }, gPool), el('rect', { rx: 2 }, gPoolAhead)]) : [];
+
+  for (const p of programs) {
+    p.g = el('g', { class: 'series' }, gSeries);
+    p.path = p.line ? el('path', { class: 'ln' }, p.g) : null;
+    // Big circles first, so a small round is never buried under a large one
+    p.pts.slice().sort((a, b) => b.r - a.r).forEach(pt => { pt.el = el('circle', { class: 'pt', r: pt.r.toFixed(1) }, p.g); });
+  }
+  const colorOf = p => darkQ.matches ? p.dark : p.light;
+  function paint() { for (const p of programs) p.g.style.setProperty('--c', colorOf(p)); }
+  paint();
+
+  // ---- Layout and scales ------------------------------------------------------
+  let L = null;
+  function layout() {
+    const box = chartEl.getBoundingClientRect();
+    const W = Math.max(280, Math.round(box.width)), H = Math.round(box.height);
+    const small = W < 600;
+    const poolW = pool ? (small ? 54 : 120) : 0;
+    const gutter = small ? 64 : 92;
+    L = { W: W, H: H, small: small, top: 30, bottom: H - 26, plotR: W - poolW - gutter, poolL: W - poolW, poolW: poolW };
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    clipPlotRect.setAttribute('width', L.plotR + 4);
+    clipPlotRect.setAttribute('height', H);
+    // The pool history sits on the same time axis, so it gets the same width
+    histSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + HIST_H);
+    clipHistRect.setAttribute('width', L.plotR + 4);
+    clipHistRect.setAttribute('height', HIST_H);
+  }
+
+  // cur is what is on screen, tgt is where it is heading; both are
+  // { x0, x1, y0, y1, score, alpha, pmax } and a spring carries one to the other.
+  const KEYS = ['x0', 'x1', 'y0', 'y1', 'score', 'alpha', 'pmax'];
+  let cur = null, tgt = null, raf = 0, lastFrame = 0, started = 0;
+  const vel = {};
+  const X = t => 6 + (t - cur.x0) / (cur.x1 - cur.x0) * (L.plotR - 22);
+  const Y = s => L.bottom - (s - cur.y0) / (cur.y1 - cur.y0) * (L.bottom - L.top);
+
+  const rangeStart = () => st.range === '1y' ? tMax - 365 * DAY : st.range === '3y' ? tMax - 3 * 365 * DAY : tMin;
+
+  function target() {
+    const x1 = tMax, x0 = rangeStart();
+    let lo = Infinity, hi = -Infinity;
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      for (const pt of p.pts) if (pt.t >= x0) { lo = Math.min(lo, pt.s); hi = Math.max(hi, pt.s); }
+    }
+    if (lo === Infinity) { lo = 400; hi = 550; }
+    if (st.score != null) { lo = Math.min(lo, st.score); hi = Math.max(hi, st.score); }
+    const pad = Math.max((hi - lo) * 0.09, 14);
+    const from = hist.length ? shownFrom() : 0;
+    let most = 0;
+    for (const h of hist) if (h.t >= x0) most = Math.max(most, shownSum(h, from));
+    if (!most) for (const h of hist) most = Math.max(most, shownSum(h, from));
+    most = Math.max(most, 1) * 1.08;
+    const unit = Math.pow(10, Math.floor(Math.log10(most))) / 4;
+    return {
+      pmax: Math.ceil(most / unit) * unit,
+      x0: x0, x1: x1,
+      y0: Math.floor((lo - pad) / 10) * 10, y1: Math.ceil((hi + pad) / 10) * 10,
+      score: st.score != null ? st.score : (cur ? cur.score : (lo + hi) / 2),
+      alpha: st.score != null ? 1 : 0,
+    };
+  }
+
+  function go(animate) {
+    hidePop();
+    tgt = target();
+    if (!cur || !animate || reduceQ.matches) {
+      cur = Object.assign({}, tgt);
+      KEYS.forEach(k => { vel[k] = 0; });
+      draw();
+      return;
+    }
+    // A score entered for the first time rises from the bottom of the chart,
+    // filling the circles it passes.
+    if (cur.alpha < 0.02 && tgt.alpha === 1) { cur.score = cur.y0; vel.score = 0; }
+    started = performance.now();
+    if (!raf) { lastFrame = started; raf = requestAnimationFrame(tick); }
+  }
+
+  function tick(now) {
+    const dt = clamp((now - lastFrame) / 1000, 0, 0.05);
+    lastFrame = now;
+    const K = 150, C = 20; // a spring with a little overshoot
+    const steps = Math.max(1, Math.ceil(dt / 0.004)), h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      for (const k of KEYS) {
+        vel[k] += (-K * (cur[k] - tgt[k]) - C * vel[k]) * h;
+        cur[k] += vel[k] * h;
+      }
+    }
+    const sx = tgt.x1 - tgt.x0, sy = tgt.y1 - tgt.y0;
+    const scale = { x0: sx, x1: sx, y0: sy, y1: sy, score: sy, alpha: 1, pmax: tgt.pmax };
+    const moving = KEYS.some(k => Math.abs(cur[k] - tgt[k]) > scale[k] * 4e-4 || Math.abs(vel[k]) > scale[k] * 4e-3);
+    if (!moving || now - started > 3000) {
+      cur = Object.assign({}, tgt);
+      KEYS.forEach(k => { vel[k] = 0; });
+      raf = 0;
+      draw();
+      return;
+    }
+    draw();
+    raf = requestAnimationFrame(tick);
+  }
+
+  // ---- Drawing ----------------------------------------------------------------
+  function yStep() {
+    const span = tgt.y1 - tgt.y0, max = Math.max(3, Math.floor((L.bottom - L.top) / 60));
+    for (const s of [10, 20, 25, 50, 100, 200, 250, 500]) if (span / s <= max) return s;
+    return 1000;
+  }
+
+  function xTicks() {
+    const out = [], days = (cur.x1 - cur.x0) / DAY, pw = L.plotR;
+    const first = new Date(cur.x0), y0 = first.getUTCFullYear();
+    if (days < 500) {
+      const px = pw / (days / 30.44), step = px >= 46 ? 1 : px >= 23 ? 2 : 3;
+      for (let y = y0, m = first.getUTCMonth(); ; m++) {
+        if (m > 11) { m = 0; y++; }
+        const t = Date.UTC(y, m, 1);
+        if (t > cur.x1) break;
+        if (t >= cur.x0 && m % step === 0) out.push({ t: t, label: m === 0 ? String(y) : MONTHS[m], strong: m === 0 });
+      }
+    } else {
+      const px = pw / (days / 365.25), step = px >= 46 ? 1 : px >= 23 ? 2 : 5;
+      for (let y = y0; ; y++) {
+        const t = Date.UTC(y, 0, 1);
+        if (t > cur.x1) break;
+        if (t >= cur.x0 && y % step === 0) out.push({ t: t, label: String(y), strong: false });
+      }
+    }
+    return out;
+  }
+
+  function draw() {
+    const W = L.W, H = L.H, top = L.top, bottom = L.bottom, plotR = L.plotR;
+    const hasScore = tgt.alpha === 1;
+    const sc = cur.score;
+    const f = v => v.toFixed(1);
+
+    // Grid: score lines run under the pool too, since both read off one axis
+    let g = '', labels = '';
+    const step = yStep();
+    for (let v = Math.ceil(cur.y0 / step) * step; v <= cur.y1; v += step) {
+      const y = Y(v);
+      if (y < top - 4 || y > bottom + 1) continue;
+      g += '<line x1="0" x2="' + W + '" y1="' + f(y) + '" y2="' + f(y) + '"/>';
+      // The YOU pill sits at the left edge too; it wins over a number it would cover
+      if (hasScore && Math.abs(y - 4 - Y(sc)) < 16) continue;
+      labels += '<text x="6" y="' + f(y - 4) + '">' + v + '</text>';
+    }
+    for (const tk of xTicks()) {
+      const x = X(tk.t);
+      if (x < 0 || x > plotR - 26) continue;
+      g += '<line x1="' + f(x) + '" x2="' + f(x) + '" y1="' + top + '" y2="' + (bottom + 6) + '"/>';
+      labels += '<text' + (tk.strong ? ' class="strong"' : '') + ' x="' + f(x + 4) + '" y="' + (H - 8) + '">' + tk.label + '</text>';
+    }
+    gGrid.innerHTML = g;
+    gLabels.innerHTML = labels;
+
+    // Pool: bar length is candidates per CRS point, so uneven bins compare fairly
+    if (pool) {
+      pool.bins.forEach((b, i) => {
+        const y1 = Math.max(Y(b.hi + 0.5), top), y2 = Math.min(Y(b.lo - 0.5), bottom);
+        const h = y2 - y1 - 1;
+        const w = h > 0 ? Math.max(1, b.d / maxDensity * (L.poolW - 8)) : 0;
+        for (const r of poolRects[i]) {
+          r.setAttribute('x', L.poolL);
+          r.setAttribute('y', f(y1));
+          r.setAttribute('width', f(w));
+          r.setAttribute('height', f(Math.max(0, h)));
+        }
+      });
+      clipAheadRect.setAttribute('x', L.poolL);
+      clipAheadRect.setAttribute('width', L.poolW);
+      clipAheadRect.setAttribute('height', f(hasScore ? Math.max(0, Y(sc)) : 0));
+    }
+
+    // Rounds: solid where your score clears the cutoff, hollow where it does not
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      let d = '';
+      for (const pt of p.pts) {
+        const x = f(X(pt.t)), y = f(Y(pt.s));
+        pt.el.setAttribute('cx', x);
+        pt.el.setAttribute('cy', y);
+        if (p.path) d += (d ? 'L' : 'M') + x + ' ' + y;
+        const state = hasScore ? (pt.s <= sc ? 1 : 0) : 2;
+        if (state !== pt.state) {
+          pt.state = state;
+          pt.el.setAttribute('class', state === 1 ? 'pt in' : state === 0 ? 'pt out' : 'pt');
+        }
+      }
+      if (p.path) p.path.setAttribute('d', d);
+    }
+
+    drawEnds();
+    drawHist();
+
+    gHead.innerHTML = '<text class="hd" x="' + (plotR + 8) + '" y="14">LATEST</text>' +
+      (pool ? '<text class="hd" x="' + L.poolL + '" y="14">POOL</text>' : '');
+
+    // You
+    const a = clamp(cur.alpha, 0, 1);
+    gYou.setAttribute('opacity', a.toFixed(2));
+    gYou.style.display = a < 0.01 ? 'none' : '';
+    const yy = clamp(Y(sc), top - 12, bottom + 12);
+    youLine.setAttribute('x1', 0); youLine.setAttribute('x2', W);
+    youLine.setAttribute('y1', f(yy)); youLine.setAttribute('y2', f(yy));
+    // The pill counts along with the line while it moves
+    const shown = String(Math.round(clamp(sc, 0, 1200))), pillW = 58 + shown.length * 8;
+    youPill.setAttribute('x', 34); youPill.setAttribute('y', f(yy - 12)); youPill.setAttribute('width', pillW);
+    youPillTx.setAttribute('x', 34 + pillW / 2); youPillTx.setAttribute('y', f(yy + 4.5));
+    youPillTx.innerHTML = 'YOU<tspan class="yn" dx="5">' + shown + '</tspan>';
+    if (pool) {
+      youAhead.setAttribute('x', W - 6);
+      youAhead.setAttribute('y', f(yy < top + 22 ? yy + 16 : yy - 7));
+      youAhead.textContent = compact(ahead(clamp(sc, 0, 1200))) + ' ahead';
+    }
+  }
+
+  /**
+   * Pool over time, on the main chart's time axis. Score bands are stacked with
+   * the highest on top; with a score entered only your band and those above it
+   * are drawn, and a line marks your place among them.
+   */
+  const histY = v => (HIST_H - 22) - v / cur.pmax * (HIST_H - 36);
+  function drawHist() {
+    if (!hist.length) return;
+    const top = 14, bottom = HIST_H - 22, plotR = L.plotR;
+    const f = v => v.toFixed(1);
+    const a = clamp(cur.alpha, 0, 1), sc = clamp(cur.score, 0, 1200);
+
+    let g = '';
+    let step = 250000;
+    for (const s of [50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000]) if (tgt.pmax / s <= 4.2) { step = s; break; }
+    for (let v = step; v <= cur.pmax; v += step) {
+      const y = histY(v);
+      g += '<line x1="0" x2="' + L.W + '" y1="' + f(y) + '" y2="' + f(y) + '"/><text x="6" y="' + f(y - 4) + '">' + compact(v) + '</text>';
+    }
+    g += '<line x1="0" x2="' + L.W + '" y1="' + bottom + '" y2="' + bottom + '"/>';
+    for (const tk of xTicks()) {
+      const x = X(tk.t);
+      if (x < 0 || x > plotR - 26) continue;
+      g += '<line x1="' + f(x) + '" x2="' + f(x) + '" y1="' + top + '" y2="' + (bottom + 6) + '"/>' +
+        '<text' + (tk.strong ? ' class="strong"' : '') + ' x="' + f(x + 4) + '" y="' + (HIST_H - 6) + '">' + tk.label + '</text>';
+    }
+    hGrid.innerHTML = g;
+
+    const from = shownFrom(), count = hist.length, shown = hBands.length - from;
+    const xs = hist.map(h => f(X(h.t)));
+    let below = hist.map(() => 0);
+    hBands.forEach((path, i) => {
+      if (i < from) { path.setAttribute('d', ''); return; }
+      const above = hist.map((h, k) => below[k] + h.n[i]);
+      let d = '';
+      for (let k = 0; k < count; k++) d += (k ? 'L' : 'M') + xs[k] + ' ' + f(histY(above[k]));
+      for (let k = count - 1; k >= 0; k--) d += 'L' + xs[k] + ' ' + f(histY(below[k]));
+      path.setAttribute('d', d + 'Z');
+      path.setAttribute('fill-opacity', (shown < 2 ? 0.6 : 0.16 + 0.56 * (i - from) / (shown - 1)).toFixed(2));
+      below = above;
+    });
+    // "below" is now the top of the stack. Higher scores sit on top, so the
+    // people ahead of you fill the stack from the top down to your line.
+    const place = (h, k) => clamp(below[k] - aheadIn(h.n, sc), 0, below[k]);
+    let line = '';
+    if (a > 0.01) hist.forEach((h, k) => { line += (k ? 'L' : 'M') + xs[k] + ' ' + f(histY(place(h, k))); });
+    hYou.setAttribute('opacity', a.toFixed(2));
+    hYouCase.setAttribute('d', line);
+    hYouLine.setAttribute('d', line);
+
+    const last = hist[count - 1], x = X(last.t), stackTop = below[count - 1];
+    const items = [{ y: histY(stackTop), num: compact(stackTop), nm: from ? pool.bins[from].lo + ' and up' : 'in pool' }];
+    if (a > 0.5) items.push({ y: histY(place(last, count - 1)), num: compact(aheadIn(last.n, sc)), nm: 'ahead' });
+    items.forEach((it, i) => { it.ly = Math.max(it.y, i ? items[i - 1].ly + 28 : top - 2); });
+    for (let i = items.length - 1; i >= 0; i--) {
+      items[i].ly = Math.min(items[i].ly, i < items.length - 1 ? items[i + 1].ly - 28 : bottom - 16);
+    }
+    hEnds.innerHTML = items.map(it =>
+      '<line x1="' + f(x + 3) + '" y1="' + f(it.y) + '" x2="' + (plotR + 9) + '" y2="' + f(it.ly) + '"/>' +
+      '<text class="num" x="' + (plotR + 13) + '" y="' + f(it.ly + 4.5) + '">' + it.num + '</text>' +
+      '<text class="nm" x="' + (plotR + 13) + '" y="' + f(it.ly + 15.5) + '">' + it.nm + '</text>').join('');
+  }
+
+  /** Labels at the right edge: each program's latest cutoff, nudged apart. */
+  function drawEnds() {
+    const span = cur.x1 - cur.x0, items = [];
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      const last = p.pts[p.pts.length - 1];
+      // A program that has not drawn lately would need a leader across the chart
+      if (tMax - last.t > span * 0.25) continue;
+      items.push({ p: p, last: last, y: Y(last.s) });
+    }
+    items.sort((a, b) => a.y - b.y);
+    const GAP = 28, lo = L.top + 6, hi = L.bottom - 14;
+    items.forEach((it, i) => { it.ly = Math.max(it.y, i ? items[i - 1].ly + GAP : lo); });
+    for (let i = items.length - 1; i >= 0; i--) {
+      items[i].ly = Math.min(items[i].ly, i < items.length - 1 ? items[i + 1].ly - GAP : hi);
+    }
+    const x = L.plotR;
+    let s = '';
+    for (const it of items) {
+      const fromX = Math.min(X(it.last.t) + it.last.r + 2, x + 2);
+      s += '<g style="--c:' + colorOf(it.p) + '">' +
+        // A plain leader, no marker: a dot here would read as one more round
+        '<line x1="' + fromX.toFixed(1) + '" y1="' + it.y.toFixed(1) + '" x2="' + (x + 9) + '" y2="' + it.ly.toFixed(1) + '"/>' +
+        '<text class="num" x="' + (x + 13) + '" y="' + (it.ly + 4.5).toFixed(1) + '">' + it.last.s + '</text>' +
+        '<text class="nm" x="' + (x + 13) + '" y="' + (it.ly + 15.5).toFixed(1) + '">' + esc(it.p.short) + '</text>' +
+        '</g>';
+    }
+    gEnds.innerHTML = s;
+  }
+
+  // ---- Popup: tap or hover a round or a pool bar ------------------------------
+  function hidePop() {
+    pop.hidden = true; ring.setAttribute('r', 0);
+    histPop.hidden = true; hRing.setAttribute('r', 0);
+  }
+
+  function showPop(html, x, yTop, yBottom, box) {
+    hidePop();
+    box = box || pop;
+    box.innerHTML = html;
+    box.hidden = false;
+    const w = box.offsetWidth, h = box.offsetHeight;
+    box.style.left = clamp(x - w / 2, 6, L.W - w - 6) + 'px';
+    box.style.top = (yTop - h - 10 >= 0 ? yTop - h - 10 : yBottom + 10) + 'px';
+  }
+
+  function probeHist(e) {
+    if (!cur || !hist.length) return;
+    const px = e.clientX - histEl.getBoundingClientRect().left;
+    let best = null, reach = 40;
+    for (const h of hist) {
+      const d = Math.abs(X(h.t) - px);
+      if (d < reach && X(h.t) >= 0) { best = h; reach = d; }
+    }
+    if (!best) return hidePop();
+    const from = shownFrom();
+    const x = X(best.t), y = histY(shownSum(best, from));
+    let html = '<div class="pk">' + df.format(best.t) + '</div><div class="big">' + nf.format(best.total) +
+      '</div><div>candidates in the pool</div><div class="rows">';
+    for (let i = pool.bins.length - 1; i >= from; i--) {
+      const mine = st.score != null && i === from ? ' class="me"' : '';
+      html += '<span' + mine + '>' + pool.bins[i].lo + '&ndash;' + pool.bins[i].hi + (mine ? ' (you)' : '') + '</span>' +
+        '<span' + mine + '>' + nf.format(best.n[i]) + '</span>';
+    }
+    html += '</div>';
+    if (st.score != null) html += '<div class="vs">' + nf.format(Math.round(aheadIn(best.n, st.score))) + ' ahead of your ' + st.score + '</div>';
+    showPop(html, x, y - 8, y + 8, histPop);
+    hRing.setAttribute('cx', x.toFixed(1)); hRing.setAttribute('cy', y.toFixed(1)); hRing.setAttribute('r', 5);
+  }
+
+  function nearest(px, py) {
+    const reach = coarse ? 30 : 16;
+    let best = null, bestEdge = Infinity, bestCentre = Infinity;
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      for (const pt of p.pts) {
+        const x = X(pt.t);
+        if (x < -20 || x > L.plotR + 4) continue;
+        const centre = Math.hypot(x - px, Y(pt.s) - py), edge = Math.max(0, centre - pt.r);
+        if (edge > reach) continue;
+        if (edge < bestEdge || (edge === bestEdge && centre < bestCentre)) { best = pt; bestEdge = edge; bestCentre = centre; }
+      }
+    }
+    return best;
+  }
+
+  function probe(e) {
+    if (!cur) return;
+    const box = chartEl.getBoundingClientRect();
+    const px = e.clientX - box.left, py = e.clientY - box.top;
+    if (pool && px >= L.poolL) {
+      const b = pool.bins.find(b => py >= Y(b.hi + 0.5) && py <= Y(b.lo - 0.5));
+      if (!b || py < L.top || py > L.bottom) return hidePop();
+      const y = clamp((Y(b.hi + 0.5) + Y(b.lo - 0.5)) / 2, L.top, L.bottom);
+      return showPop('<div class="pk">CRS ' + b.lo + '&ndash;' + b.hi + '</div><div class="big">' + nf.format(b.n) +
+        '</div><div>candidates in the pool</div><div class="ty">Bar length: about ' + nf.format(Math.round(b.d)) +
+        ' per CRS point. ' + esc(poolDate()) + '</div>', px, y - 8, y + 8);
+    }
+    const pt = nearest(px, py);
+    if (!pt) return hidePop();
+    const x = X(pt.t), y = Y(pt.s);
+    let html = '<div class="pk"><i style="background:' + colorOf(pt.p) + '"></i>' + esc(pt.p.label) + '</div>' +
+      '<div class="big">' + pt.s + '</div>' +
+      '<div>' + df.format(pt.t) + ' &middot; ' + nf.format(pt.n) + ' invited</div>';
+    if (st.score != null) {
+      const gap = st.score - pt.s;
+      html += '<div class="vs">' + (gap >= 0 ? 'Your ' + st.score + ' clears it' + (gap ? ' by ' + gap : '') : 'Your ' + st.score + ' is ' + (-gap) + ' short') + '</div>';
+    }
+    if (pt.type !== pt.p.label) html += '<div class="ty">' + esc(pt.type) + '</div>';
+    showPop(html, x, y - pt.r - 4, y + pt.r + 4);
+    ring.setAttribute('cx', x.toFixed(1)); ring.setAttribute('cy', y.toFixed(1)); ring.setAttribute('r', (pt.r + 4).toFixed(1));
+  }
+
+  chartEl.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') probe(e); });
+  chartEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hidePop(); });
+  chartEl.addEventListener('click', probe);
+  histEl.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') probeHist(e); });
+  histEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hidePop(); });
+  histEl.addEventListener('click', probeHist);
+
+  // ---- Words ------------------------------------------------------------------
+  function poolDate() {
+    // IRCC writes this date out in words; only an ISO date is safe to reformat
+    const iso = pool.asOf.length === 10 && pool.asOf[4] === '-';
+    return 'Pool as of ' + (iso ? df.format(Date.parse(pool.asOf)) : pool.asOf);
+  }
+
+  function words() {
+    const lede = document.getElementById('lede');
+    if (st.score == null) {
+      lede.innerHTML = 'Each circle is one round, placed at the lowest score invited. ' +
+        '<b>Type your score</b> to see which rounds you would have cleared.';
+    } else {
+      lede.innerHTML = '<span class="key in"></span> rounds <b>' + st.score + '</b> would have cleared, ' +
+        '<span class="key"></span> rounds it would have missed.' +
+        (pool ? ' About <b>' + nf.format(Math.round(ahead(st.score))) + '</b> of ' + nf.format(pool.total) +
+          ' candidates in the pool are ahead of you.' : '');
+    }
+    if (hist.length) {
+      const mine = pool.bins[shownFrom()];
+      document.getElementById('histSub').innerHTML = st.score == null
+        ? 'Candidates in the pool by score range, at each snapshot IRCC published. Stronger bands are higher scores. ' +
+          'Type your score to see only your range and the people above it.'
+        : 'Candidates in your score range (<b>' + mine.lo + '&ndash;' + mine.hi + '</b>) and above, at each snapshot IRCC published. ' +
+          'The line is your place: everyone over it was ahead of <b>' + st.score + '</b>.';
+    }
+    const latest = programs.filter(p => st.on.has(p.slug) && p.inRange).map(p => {
+      const l = p.pts[p.pts.length - 1];
+      return p.label + ' ' + l.s + ' on ' + df.format(l.t);
+    });
+    svg.setAttribute('aria-label', 'CRS cutoff of every Express Entry round over time, by program. Latest cutoffs: ' +
+      latest.join('; ') + '.' + (st.score != null ? ' Your score: ' + st.score + '.' : ''));
+  }
+
+  // ---- Controls ---------------------------------------------------------------
+  const rangesEl = document.getElementById('ranges');
+  const programsEl = document.getElementById('programs');
+  const input = document.getElementById('score');
+
+  function button(cls, html, parent, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    if (cls) b.className = cls;
+    b.innerHTML = html;
+    b.addEventListener('click', onClick);
+    parent.appendChild(b);
+    return b;
+  }
+
+  RANGES.forEach(r => { button('', r[1], rangesEl, () => { st.range = r[0]; apply(); }).dataset.range = r[0]; });
+
+  programsEl.style.display = 'grid';
+  programsEl.style.gap = '12px';
+  const famRows = [];
+  for (const fam of DATA.families) {
+    const members = programs.filter(p => p.family === fam.id);
+    if (!members.length) continue;
+    const row = document.createElement('div');
+    row.className = 'fam';
+    const label = document.createElement('span');
+    label.className = 'fam-label';
+    label.textContent = fam.label;
+    row.appendChild(label);
+    for (const p of members) {
+      p.chip = button('chip', '<i></i>' + esc(p.short), row, () => {
+        if (st.on.has(p.slug)) st.on.delete(p.slug); else st.on.add(p.slug);
+        apply();
+      });
+      p.chip.title = p.label;
+    }
+    programsEl.appendChild(row);
+    famRows.push({ el: row, members: members });
+  }
+  const quick = document.createElement('div');
+  quick.className = 'fam';
+  button('link', 'Main programs only', quick, () => { st.on = new Set(mainSlugs); apply(); });
+  button('link', 'Show all', quick, () => { st.on = new Set(slugs); apply(); });
+  programsEl.appendChild(quick);
+
+  // Invitations per year: every year, whatever the range, for the programs switched on
+  const yearsEl = document.getElementById('years');
+  const yearRows = [];
+  const left = {};
+  ((DATA.leftWithoutPr || {}).years || []).forEach(r => { left[r.year] = r; });
+  // To the nearest 10,000: the sources do not support finer than that
+  const approx = n => '\u2248' + nf.format(Math.round(n / 10000) * 10000);
+  for (let y = new Date(tMin).getUTCFullYear(), end = new Date(tMax).getUTCFullYear(); y <= end; y++) {
+    const label = document.createElement('span'), track = document.createElement('span'), nums = document.createElement('span');
+    label.className = 'y';
+    label.textContent = y === end ? y + ' so far' : y;
+    track.className = 'track';
+    nums.className = 'nums';
+    const bar = track.appendChild(document.createElement('i'));
+    const num = nums.appendChild(document.createElement('b'));
+    const row = { y: y, bar: bar, num: num, est: null };
+    if (left[y]) {
+      row.est = track.appendChild(document.createElement('i'));
+      row.est.className = 'est';
+      const n = nums.appendChild(document.createElement('span'));
+      n.textContent = approx(left[y].estimate) + ' left' + (left[y].months < 12 ? ', Jan\u2013' + MONTHS[left[y].months - 1] : '');
+      n.title = 'Estimate: temporary residents who left without permanent residence';
+    }
+    yearsEl.append(label, track, nums);
+    yearRows.push(row);
+  }
+  const hasLeft = yearRows.some(r => r.est);
+  if (hasLeft) {
+    document.getElementById('leftAsOf').textContent = 'Figures retrieved ' + df.format(Date.parse(DATA.leftWithoutPr.retrieved)) + '; they do not update daily.';
+  } else {
+    document.getElementById('leftInfo').hidden = true;
+  }
+  function years() {
+    const sums = {};
+    let most = 0, picked = 0;
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      picked++;
+      for (const pt of p.pts) { const y = new Date(pt.t).getUTCFullYear(); sums[y] = (sums[y] || 0) + pt.n; }
+    }
+    // One scale for both bars, so a year's invitations and departures compare by length
+    for (const r of yearRows) most = Math.max(most, sums[r.y] || 0, r.est ? left[r.y].estimate : 0);
+    for (const r of yearRows) {
+      const n = sums[r.y] || 0;
+      r.bar.style.width = (most ? n / most * 100 : 0) + '%';
+      r.num.textContent = nf.format(n);
+      if (r.est) r.est.style.width = (left[r.y].estimate / most * 100) + '%';
+    }
+    document.getElementById('yearsSub').textContent = (picked === programs.length
+      ? 'Solid bars: invitations issued across all programs.'
+      : 'Solid bars: invitations issued in the ' + picked + ' of ' + programs.length + ' programs switched on above.') +
+      (hasLeft ? ' Hollow bars: temporary residents who left Canada without permanent residence, a rough estimate.' : '');
+  }
+
+  input.value = st.score != null ? st.score : '';
+  input.addEventListener('input', () => {
+    const digits = input.value.replace(/[^0-9]/g, '');
+    if (digits !== input.value) input.value = digits;
+    // Half-typed numbers (4, 48) leave the line where it was
+    if (digits === '') st.score = null;
+    else if (parseScore(digits) != null) st.score = parseScore(digits);
+    else return;
+    apply();
+  });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+
+  function apply(animate) {
+    for (const b of rangesEl.children) b.setAttribute('aria-pressed', String(b.dataset.range === st.range));
+    // A program with no round in the chosen range has nothing to switch on or
+    // off, so its chip goes away. The choice itself is kept, and comes back
+    // with the chip when the range reaches that program's rounds again.
+    const from = rangeStart();
+    for (const p of programs) {
+      const on = st.on.has(p.slug);
+      p.inRange = p.pts[p.pts.length - 1].t >= from;
+      p.chip.hidden = !p.inRange;
+      p.g.classList.toggle('off', !on);
+      p.chip.setAttribute('aria-pressed', String(on));
+      p.chip.style.setProperty('--c', colorOf(p));
+    }
+    for (const row of famRows) row.el.hidden = !row.members.some(p => p.inRange);
+    writeUrl();
+    words();
+    years();
+    go(animate !== false);
+  }
+
+  document.getElementById('footer').innerHTML =
+    'A lab experiment, not the live page. Contains information licensed under the ' +
+    '<a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence &ndash; Canada</a>. ' +
+    'Data: <a href="' + esc(DATA.source) + '">IRCC Express Entry rounds</a>, ' + DATA.roundCount + ' rounds, fetched ' +
+    df.format(Date.parse(DATA.fetchedAt)) + '. ' +
+    ((DATA.leftWithoutPr || {}).years ? 'Adapted from Statistics Canada, Table 17-10-0040-01, Estimates of the components of ' +
+      'international migration, quarterly, retrieved ' + df.format(Date.parse(DATA.leftWithoutPr.retrieved)) +
+      '. This does not constitute an endorsement by Statistics Canada of this product. ' : '') +
+    '<a href="../">More experiments</a> &middot; <a href="https://github.com/skfd/express_entry_score_stats">GitHub</a>';
+
+  darkQ.addEventListener('change', () => { paint(); apply(false); });
+  new ResizeObserver(() => { layout(); if (cur) go(false); }).observe(chartEl);
+
+  layout();
+  apply(false);
+})();
+</script>
+</body>
+</html>
