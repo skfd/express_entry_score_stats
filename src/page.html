@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>[Lab] Expressive - Express Entry CRS cutoffs</title>
+<!--HEAD-->
+<title><!--TITLE_PREFIX-->Canada Express Entry - CRS cutoffs</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23f59e0b' d='M32 4L29 12l-4-2 2 7-8-4 2 6H14l5 5-7 3 8 3-3 7 6-3 1 7 4-5 2 8h4l2-8 4 5 1-7 6 3-3-7 8-3-7-3 5-5h-7l2-6-8 4 2-7-4 2z'/%3E%3Crect fill='%23f59e0b' x='29' y='46' width='6' height='14' rx='1'/%3E%3C/svg%3E">
 <style>
   /*
@@ -35,7 +35,7 @@
 
   .top { padding: 12px 16px 8px; }
   h1 { margin: 0; font-size: 12.5px; font-weight: 500; color: var(--muted); }
-  .lab {
+  .badge {
     display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px;
     background: var(--ink); color: var(--page);
     font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
@@ -166,7 +166,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <h1><span class="lab">Lab</span>Canada Express Entry &middot; CRS cutoffs &middot; <a href="../../">live page</a></h1>
+    <h1><!--BADGE-->Canada Express Entry &middot; CRS cutoffs<!--LIVE_LINK--></h1>
   </header>
 
   <div class="chart" id="chart">
@@ -213,7 +213,7 @@
 </div>
 
 <script>
-const DATA = /*LAB_DATA*/null;
+const DATA = /*PAGE_DATA*/null;
 
 (function () {
   'use strict';
@@ -263,7 +263,7 @@ const DATA = /*LAB_DATA*/null;
   // Every snapshot IRCC published, oldest first
   const hist = pool ? (DATA.poolHistory || []).map(r => ({ t: r[0], total: r[1], n: r.slice(2) })) : [];
 
-  // ---- State (kept in the URL, same parameters as the main page) -------------
+  // ---- State (kept in the URL) -------------
   const slugs = programs.map(p => p.slug);
   const mainSlugs = programs.filter(p => p.family === 'main').map(p => p.slug);
   const parseScore = v => { const n = parseInt(v, 10); return n >= 100 && n <= 1200 ? n : null; };
@@ -903,14 +903,14 @@ const DATA = /*LAB_DATA*/null;
   }
 
   document.getElementById('footer').innerHTML =
-    'A lab experiment, not the live page. Contains information licensed under the ' +
+    (DATA.beta ? 'A beta preview, not the live page. ' : '') + 'Contains information licensed under the ' +
     '<a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence &ndash; Canada</a>. ' +
     'Data: <a href="' + esc(DATA.source) + '">IRCC Express Entry rounds</a>, ' + DATA.roundCount + ' rounds, fetched ' +
     df.format(Date.parse(DATA.fetchedAt)) + '. ' +
     ((DATA.leftWithoutPr || {}).years ? 'Adapted from Statistics Canada, Table 17-10-0040-01, Estimates of the components of ' +
       'international migration, quarterly, retrieved ' + df.format(Date.parse(DATA.leftWithoutPr.retrieved)) +
       '. This does not constitute an endorsement by Statistics Canada of this product. ' : '') +
-    '<a href="../">More experiments</a> &middot; <a href="https://github.com/skfd/express_entry_score_stats">GitHub</a>';
+    '<a href="' + (DATA.beta ? '../' : '') + 'lab/">Lab</a> &middot; <a href="https://github.com/skfd/express_entry_score_stats">GitHub</a>';
 
   darkQ.addEventListener('change', () => { paint(); apply(false); });
   new ResizeObserver(() => { layout(); if (cur) go(false); }).observe(chartEl);

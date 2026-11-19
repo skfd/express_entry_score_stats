@@ -5,8 +5,9 @@ Visualize historical CRS cutoff scores for all Canada Express Entry invitation r
 ## Features
 
 - All 394+ rounds fetched from the [official IRCC JSON endpoint](https://www.canada.ca/content/dam/ircc/documents/json/ee_rounds_123_en.json) (source: [Express Entry rounds page](https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html)).
-- Separate series for each program: General, PNP, CEC, French, Healthcare, STEM, and more, grouped into main programs, occupation categories and newer categories. Circle size shows how many invitations a round issued.
-- Enter your CRS score to see a reference line (circles near it are nudged to the side they fall on) and an arrow at your place in the candidate pool.
+- One chart is the page: cutoffs for each program (General, PNP, CEC, French, Healthcare, STEM, and more) and the candidate pool share a single score axis. Circle size shows how many invitations a round issued.
+- Enter your CRS score to see which rounds it would have cleared and how many candidates in the pool are ahead of you.
+- Below the chart: the pool over time by score range, and invitations per year beside a rough estimate of temporary residents who left without permanent residence.
 - Show the last year, the last 3 years or all time. Phones start on the last year, larger screens on 3 years.
 - Starts on the main programs. Tap programs to add or remove them, or show all of them.
 - All settings persist in the URL. Bookmark any configuration.
@@ -26,10 +27,10 @@ npm run download
 npm run generate
 ```
 
-Open `dist/chart.html` in a browser.
+Open `dist/index.html` in a browser.
 
 `download` fetches the latest round data (including CRS score pool distribution) from the [IRCC JSON endpoint](https://www.canada.ca/content/dam/ircc/documents/json/ee_rounds_123_en.json) and saves it to `src/data/rounds.json`.
-`generate` builds a self-contained HTML file with all data embedded.
+`generate` builds a self-contained HTML file with all data embedded: the template is `src/page.html`, a static page of plain HTML, CSS and JavaScript.
 
 ### Deploy to GitHub Pages
 
@@ -54,9 +55,10 @@ one page each, built from the same daily data. They are not indexed, have no
 analytics and do not touch the live page. An experiment is a static HTML template
 in `src/lab/`; `npm run lab` embeds the data and writes it to `dist/lab/<name>/`.
 
-- `expressive` applies the principles behind Material 3 Expressive (not its look):
-  the chart is the page, the candidate pool is drawn along the same score axis,
-  and your score is the one thing in full contrast.
+An experiment that works out leaves the lab and becomes `src/page.html`. The first,
+`expressive`, did: it applies the principles behind Material 3 Expressive (not its
+look), so the chart is the page, the candidate pool is drawn along the same score
+axis, and your score is the one thing in full contrast.
 
 ## Data Source
 

@@ -1,4 +1,4 @@
-"""Recalculate src/lab/left-without-pr.json: a yearly estimate of temporary
+"""Recalculate src/data/left-without-pr.json: a yearly estimate of temporary
 residents who left Canada without permanent residence.
 
   estimate = StatCan non-permanent resident outflows
@@ -14,7 +14,7 @@ It is not part of the daily build; the JSON is a snapshot. To refresh it:
        https://www.ircc.canada.ca/opendata-donneesouvertes/data/ODP-TR_transition-IMP_PT_immcat.csv
        https://www.ircc.canada.ca/opendata-donneesouvertes/data/ODP-TR_transition-TFWP_PT_immcat.csv
      (the PGWP file is part of IMP and is not added)
-  3. python -I src/lab/left-without-pr.py <statcan zip> <ircc folder> src/lab/left-without-pr.json <YYYY-MM-DD>
+  3. python -I src/data/left-without-pr.py <statcan zip> <ircc folder> src/data/left-without-pr.json <YYYY-MM-DD>
 
 Known gaps, all of which make the estimate too high: outflows also hold
 asylum claimants who became permanent residents and people who lost status
