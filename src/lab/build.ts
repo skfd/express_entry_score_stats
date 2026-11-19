@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import type { DrawData, DrawRound } from "../types.js";
+import type { DrawData, DrawRound, ScoreDistribution } from "../types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
@@ -172,36 +172,53 @@ function buildData(data: DrawData) {
       };
     });
 
-  // The newest pool snapshot, as score bins from low to high
-  const latest = data.rounds
+  // Pool snapshots, oldest first, one per date IRCC took one. Each is score
+  // bins from low to high; the newest is the pool drawn beside the chart.
+  const BINS: Array<[number, number, keyof ScoreDistribution]> = [
+    [0, 300, "range0_300"],
+    [301, 350, "range301_350"],
+    [351, 400, "range351_400"],
+    [401, 410, "range401_410"],
+    [411, 420, "range411_420"],
+    [421, 430, "range421_430"],
+    [431, 440, "range431_440"],
+    [441, 450, "range441_450"],
+    [451, 460, "range451_460"],
+    [461, 470, "range461_470"],
+    [471, 480, "range471_480"],
+    [481, 490, "range481_490"],
+    [491, 500, "range491_500"],
+    [501, 600, "range501_600"],
+    [601, 1200, "range601_1200"],
+  ];
+  const seen = new Set<string>();
+  const snapshots = data.rounds
     .filter((r) => r.distribution && r.distribution.total > 0)
-    .sort((a, b) => utc(b.date) - utc(a.date))[0];
+    .sort((a, b) => utc(a.date) - utc(b.date))
+    .filter((r) => {
+      const key = r.distribution!.asOfDate || r.date;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  const counts = (d: ScoreDistribution) => BINS.map(([, , key]) => Number(d[key]) || 0);
+  const latest = snapshots[snapshots.length - 1];
   let pool = null;
   if (latest) {
     const d = latest.distribution!;
-    const bins: Array<[number, number, number]> = [
-      [0, 300, d.range0_300],
-      [301, 350, d.range301_350],
-      [351, 400, d.range351_400],
-      [401, 410, d.range401_410],
-      [411, 420, d.range411_420],
-      [421, 430, d.range421_430],
-      [431, 440, d.range431_440],
-      [441, 450, d.range441_450],
-      [451, 460, d.range451_460],
-      [461, 470, d.range461_470],
-      [471, 480, d.range471_480],
-      [481, 490, d.range481_490],
-      [491, 500, d.range491_500],
-      [501, 600, d.range501_600],
-      [601, 1200, d.range601_1200],
-    ];
+    const n = counts(d);
     pool = {
       asOf: d.asOfDate || latest.date,
       total: d.total,
-      bins: bins.map(([lo, hi, n]) => ({ lo, hi, n: n || 0 })),
+      bins: BINS.map(([lo, hi], i) => ({ lo, hi, n: n[i] })),
     };
   }
+  // [time, total, ...count per bin]
+  const poolHistory = snapshots.map((r) => [
+    utc(r.date),
+    r.distribution!.total,
+    ...counts(r.distribution!),
+  ]);
 
   return {
     fetchedAt: data.fetchedAt,
@@ -210,6 +227,7 @@ function buildData(data: DrawData) {
     families: FAMILY_ORDER.map((id) => ({ id, label: FAMILY_LABELS[id] })),
     programs,
     pool,
+    poolHistory,
   };
 }
 

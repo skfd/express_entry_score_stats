@@ -123,6 +123,24 @@
   .link { padding: 8px 4px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
   @media (prefers-reduced-motion: reduce) { .seg button, .chip, .series, .pt { transition: none; } }
 
+  /* Below the chart, for whoever scrolls: quiet on purpose. */
+  .more { display: grid; gap: 30px; padding-top: 30px; }
+  .more h2 { margin: 0; padding: 0 16px; font-size: 15px; font-weight: 700; }
+  .more .sub { max-width: 60ch; margin: 2px 0 10px; padding: 0 16px; color: var(--muted); font-size: 13px; }
+  .more .sub b { color: var(--ink); }
+  .hist { position: relative; height: 180px; }
+  .hist .total { fill: var(--pool); }
+  .hist .ahead-area { fill: var(--pool-strong); }
+  .hist .ahead-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
+  .years {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center;
+    max-width: 640px; padding: 0 16px; font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .years .y { color: var(--muted); }
+  .years i { display: block; height: 10px; min-width: 2px; border-radius: 3px; background: var(--pool-strong); transition: width .4s cubic-bezier(.3, 1.3, .5, 1); }
+  .years b { font-weight: 700; text-align: right; }
+  @media (prefers-reduced-motion: reduce) { .years i { transition: none; } }
+
   footer { padding: 20px 16px 32px; color: var(--muted); font-size: 12px; }
 </style>
 </head>
@@ -147,6 +165,22 @@
     </div>
     <div class="seg" id="ranges" role="group" aria-label="Time range"></div>
     <div id="programs" role="group" aria-label="Programs"></div>
+  </section>
+
+  <section class="more">
+    <div id="histBlock">
+      <h2>Pool over time</h2>
+      <p class="sub" id="histSub"></p>
+      <div class="hist" id="hist">
+        <svg id="histSvg" role="img" aria-label="Candidates in the Express Entry pool at each snapshot"></svg>
+        <div class="pop" id="histPop" hidden></div>
+      </div>
+    </div>
+    <div>
+      <h2>Invitations per year</h2>
+      <p class="sub" id="yearsSub"></p>
+      <div class="years" id="years"></div>
+    </div>
   </section>
 
   <footer id="footer"></footer>
@@ -187,14 +221,18 @@ const DATA = /*LAB_DATA*/null;
   if (pool) for (const b of pool.bins) { b.d = b.n / (b.hi - b.lo + 1); maxDensity = Math.max(maxDensity, b.d); }
 
   /** Candidates strictly above a score, spreading each bin evenly over its range. */
-  function ahead(score) {
+  function aheadIn(counts, score) {
     let n = 0;
-    for (const b of pool.bins) {
-      if (score < b.lo) n += b.n;
-      else if (score < b.hi) n += b.n * (b.hi - score) / (b.hi - b.lo + 1);
-    }
+    pool.bins.forEach((b, i) => {
+      if (score < b.lo) n += counts[i];
+      else if (score < b.hi) n += counts[i] * (b.hi - score) / (b.hi - b.lo + 1);
+    });
     return n;
   }
+  const poolNow = pool ? pool.bins.map(b => b.n) : [];
+  const ahead = score => aheadIn(poolNow, score);
+  // Every snapshot IRCC published, oldest first
+  const hist = pool ? (DATA.poolHistory || []).map(r => ({ t: r[0], total: r[1], n: r.slice(2) })) : [];
 
   // ---- State (kept in the URL, same parameters as the main page) -------------
   const slugs = programs.map(p => p.slug);
@@ -248,6 +286,22 @@ const DATA = /*LAB_DATA*/null;
   const gEnds = el('g', { class: 'ends' }, svg); // above the YOU line, so it never strikes a label through
   const ring = el('circle', { class: 'ring', r: 0 }, svg);
 
+  const histEl = document.getElementById('hist');
+  const histSvg = document.getElementById('histSvg');
+  const histPop = document.getElementById('histPop');
+  const HIST_H = 180;
+  const clipHistRect = el('rect', {}, el('clipPath', { id: 'clipHist' }, el('defs', {}, histSvg)));
+  const hGrid = el('g', { class: 'grid' }, histSvg);
+  const hClip = el('g', { 'clip-path': 'url(#clipHist)' }, histSvg);
+  const hTotal = el('path', { class: 'total' }, hClip);
+  const hAhead = el('g', {}, hClip);
+  const hAheadArea = el('path', { class: 'ahead-area' }, hAhead);
+  const hAheadLine = el('path', { class: 'ahead-line' }, hAhead);
+  histSvg.appendChild(hGrid); // axis numbers over the filled areas, not under them
+  const hEnds = el('g', { class: 'ends', style: '--c: var(--muted)' }, histSvg);
+  const hRing = el('circle', { class: 'ring', r: 0 }, histSvg);
+  if (!hist.length) document.getElementById('histBlock').hidden = true;
+
   const poolRects = pool ? pool.bins.map(() => [el('rect', { rx: 2 }, gPool), el('rect', { rx: 2 }, gPoolAhead)]) : [];
 
   for (const p of programs) {
@@ -272,11 +326,15 @@ const DATA = /*LAB_DATA*/null;
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     clipPlotRect.setAttribute('width', L.plotR + 4);
     clipPlotRect.setAttribute('height', H);
+    // The pool history sits on the same time axis, so it gets the same width
+    histSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + HIST_H);
+    clipHistRect.setAttribute('width', L.plotR + 4);
+    clipHistRect.setAttribute('height', HIST_H);
   }
 
   // cur is what is on screen, tgt is where it is heading; both are
-  // { x0, x1, y0, y1, score, alpha } and a spring carries one to the other.
-  const KEYS = ['x0', 'x1', 'y0', 'y1', 'score', 'alpha'];
+  // { x0, x1, y0, y1, score, alpha, pmax } and a spring carries one to the other.
+  const KEYS = ['x0', 'x1', 'y0', 'y1', 'score', 'alpha', 'pmax'];
   let cur = null, tgt = null, raf = 0, lastFrame = 0, started = 0;
   const vel = {};
   const X = t => 6 + (t - cur.x0) / (cur.x1 - cur.x0) * (L.plotR - 22);
@@ -294,7 +352,11 @@ const DATA = /*LAB_DATA*/null;
     if (lo === Infinity) { lo = 400; hi = 550; }
     if (st.score != null) { lo = Math.min(lo, st.score); hi = Math.max(hi, st.score); }
     const pad = Math.max((hi - lo) * 0.09, 14);
+    let most = 0;
+    for (const h of hist) if (h.t >= x0) most = Math.max(most, h.total);
+    if (!most) for (const h of hist) most = Math.max(most, h.total);
     return {
+      pmax: Math.ceil(Math.max(most, 1) * 1.08 / 10000) * 10000,
       x0: x0, x1: x1,
       y0: Math.floor((lo - pad) / 10) * 10, y1: Math.ceil((hi + pad) / 10) * 10,
       score: st.score != null ? st.score : (cur ? cur.score : (lo + hi) / 2),
@@ -330,7 +392,7 @@ const DATA = /*LAB_DATA*/null;
       }
     }
     const sx = tgt.x1 - tgt.x0, sy = tgt.y1 - tgt.y0;
-    const scale = { x0: sx, x1: sx, y0: sy, y1: sy, score: sy, alpha: 1 };
+    const scale = { x0: sx, x1: sx, y0: sy, y1: sy, score: sy, alpha: 1, pmax: tgt.pmax };
     const moving = KEYS.some(k => Math.abs(cur[k] - tgt[k]) > scale[k] * 4e-4 || Math.abs(vel[k]) > scale[k] * 4e-3);
     if (!moving || now - started > 3000) {
       cur = Object.assign({}, tgt);
@@ -435,6 +497,7 @@ const DATA = /*LAB_DATA*/null;
     }
 
     drawEnds();
+    drawHist();
 
     gHead.innerHTML = '<text class="hd" x="' + (plotR + 8) + '" y="14">LATEST</text>' +
       (pool ? '<text class="hd" x="' + L.poolL + '" y="14">POOL</text>' : '');
@@ -456,6 +519,55 @@ const DATA = /*LAB_DATA*/null;
       youAhead.setAttribute('y', f(yy < top + 22 ? yy + 16 : yy - 7));
       youAhead.textContent = compact(ahead(clamp(sc, 0, 1200))) + ' ahead';
     }
+  }
+
+  /** Pool over time, on the main chart's time axis: everyone, and those ahead of you. */
+  const histY = v => (HIST_H - 22) - v / cur.pmax * (HIST_H - 36);
+  function drawHist() {
+    if (!hist.length) return;
+    const top = 14, bottom = HIST_H - 22, plotR = L.plotR;
+    const f = v => v.toFixed(1);
+    const a = clamp(cur.alpha, 0, 1), sc = clamp(cur.score, 0, 1200);
+
+    let g = '';
+    let step = 250000;
+    for (const s of [10000, 25000, 50000, 100000]) if (tgt.pmax / s <= 3.2) { step = s; break; }
+    for (let v = step; v <= cur.pmax; v += step) {
+      const y = histY(v);
+      g += '<line x1="0" x2="' + L.W + '" y1="' + f(y) + '" y2="' + f(y) + '"/><text x="6" y="' + f(y - 4) + '">' + compact(v) + '</text>';
+    }
+    g += '<line x1="0" x2="' + L.W + '" y1="' + bottom + '" y2="' + bottom + '"/>';
+    for (const tk of xTicks()) {
+      const x = X(tk.t);
+      if (x < 0 || x > plotR - 26) continue;
+      g += '<line x1="' + f(x) + '" x2="' + f(x) + '" y1="' + top + '" y2="' + (bottom + 6) + '"/>' +
+        '<text' + (tk.strong ? ' class="strong"' : '') + ' x="' + f(x + 4) + '" y="' + (HIST_H - 6) + '">' + tk.label + '</text>';
+    }
+    hGrid.innerHTML = g;
+
+    let total = '', line = '';
+    for (const h of hist) {
+      const x = f(X(h.t));
+      total += (total ? 'L' : 'M') + x + ' ' + f(histY(h.total));
+      if (a > 0.01) line += (line ? 'L' : 'M') + x + ' ' + f(histY(aheadIn(h.n, sc)));
+    }
+    const close = 'L' + f(X(hist[hist.length - 1].t)) + ' ' + bottom + 'L' + f(X(hist[0].t)) + ' ' + bottom + 'Z';
+    hTotal.setAttribute('d', total + close);
+    hAhead.setAttribute('opacity', a.toFixed(2));
+    hAheadLine.setAttribute('d', line);
+    hAheadArea.setAttribute('d', line ? line + close : '');
+
+    const last = hist[hist.length - 1], x = X(last.t);
+    const items = [{ y: histY(last.total), num: compact(last.total), nm: 'in pool' }];
+    if (a > 0.5) { const n = aheadIn(last.n, sc); items.push({ y: histY(n), num: compact(n), nm: 'ahead' }); }
+    items.forEach((it, i) => { it.ly = Math.max(it.y, i ? items[i - 1].ly + 28 : top - 2); });
+    for (let i = items.length - 1; i >= 0; i--) {
+      items[i].ly = Math.min(items[i].ly, i < items.length - 1 ? items[i + 1].ly - 28 : bottom - 16);
+    }
+    hEnds.innerHTML = items.map(it =>
+      '<line x1="' + f(x + 3) + '" y1="' + f(it.y) + '" x2="' + (plotR + 9) + '" y2="' + f(it.ly) + '"/>' +
+      '<text class="num" x="' + (plotR + 13) + '" y="' + f(it.ly + 4.5) + '">' + it.num + '</text>' +
+      '<text class="nm" x="' + (plotR + 13) + '" y="' + f(it.ly + 15.5) + '">' + it.nm + '</text>').join('');
   }
 
   /** Labels at the right edge: each program's latest cutoff, nudged apart. */
@@ -489,14 +601,36 @@ const DATA = /*LAB_DATA*/null;
   }
 
   // ---- Popup: tap or hover a round or a pool bar ------------------------------
-  function hidePop() { pop.hidden = true; ring.setAttribute('r', 0); }
+  function hidePop() {
+    pop.hidden = true; ring.setAttribute('r', 0);
+    histPop.hidden = true; hRing.setAttribute('r', 0);
+  }
 
-  function showPop(html, x, yTop, yBottom) {
-    pop.innerHTML = html;
-    pop.hidden = false;
-    const w = pop.offsetWidth, h = pop.offsetHeight;
-    pop.style.left = clamp(x - w / 2, 6, L.W - w - 6) + 'px';
-    pop.style.top = (yTop - h - 10 >= 0 ? yTop - h - 10 : yBottom + 10) + 'px';
+  function showPop(html, x, yTop, yBottom, box) {
+    hidePop();
+    box = box || pop;
+    box.innerHTML = html;
+    box.hidden = false;
+    const w = box.offsetWidth, h = box.offsetHeight;
+    box.style.left = clamp(x - w / 2, 6, L.W - w - 6) + 'px';
+    box.style.top = (yTop - h - 10 >= 0 ? yTop - h - 10 : yBottom + 10) + 'px';
+  }
+
+  function probeHist(e) {
+    if (!cur || !hist.length) return;
+    const px = e.clientX - histEl.getBoundingClientRect().left;
+    let best = null, reach = 40;
+    for (const h of hist) {
+      const d = Math.abs(X(h.t) - px);
+      if (d < reach && X(h.t) >= 0) { best = h; reach = d; }
+    }
+    if (!best) return hidePop();
+    const x = X(best.t), y = histY(best.total);
+    let html = '<div class="pk">' + df.format(best.t) + '</div><div class="big">' + nf.format(best.total) +
+      '</div><div>candidates in the pool</div>';
+    if (st.score != null) html += '<div class="vs">' + nf.format(Math.round(aheadIn(best.n, st.score))) + ' ahead of your ' + st.score + '</div>';
+    showPop(html, x, y - 8, y + 8, histPop);
+    hRing.setAttribute('cx', x.toFixed(1)); hRing.setAttribute('cy', y.toFixed(1)); hRing.setAttribute('r', 5);
   }
 
   function nearest(px, py) {
@@ -522,7 +656,6 @@ const DATA = /*LAB_DATA*/null;
     if (pool && px >= L.poolL) {
       const b = pool.bins.find(b => py >= Y(b.hi + 0.5) && py <= Y(b.lo - 0.5));
       if (!b || py < L.top || py > L.bottom) return hidePop();
-      ring.setAttribute('r', 0);
       const y = clamp((Y(b.hi + 0.5) + Y(b.lo - 0.5)) / 2, L.top, L.bottom);
       return showPop('<div class="pk">CRS ' + b.lo + '&ndash;' + b.hi + '</div><div class="big">' + nf.format(b.n) +
         '</div><div>candidates in the pool</div><div class="ty">Bar length: about ' + nf.format(Math.round(b.d)) +
@@ -531,7 +664,6 @@ const DATA = /*LAB_DATA*/null;
     const pt = nearest(px, py);
     if (!pt) return hidePop();
     const x = X(pt.t), y = Y(pt.s);
-    ring.setAttribute('cx', x.toFixed(1)); ring.setAttribute('cy', y.toFixed(1)); ring.setAttribute('r', (pt.r + 4).toFixed(1));
     let html = '<div class="pk"><i style="background:' + colorOf(pt.p) + '"></i>' + esc(pt.p.label) + '</div>' +
       '<div class="big">' + pt.s + '</div>' +
       '<div>' + df.format(pt.t) + ' &middot; ' + nf.format(pt.n) + ' invited</div>';
@@ -541,11 +673,15 @@ const DATA = /*LAB_DATA*/null;
     }
     if (pt.type !== pt.p.label) html += '<div class="ty">' + esc(pt.type) + '</div>';
     showPop(html, x, y - pt.r - 4, y + pt.r + 4);
+    ring.setAttribute('cx', x.toFixed(1)); ring.setAttribute('cy', y.toFixed(1)); ring.setAttribute('r', (pt.r + 4).toFixed(1));
   }
 
   chartEl.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') probe(e); });
   chartEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hidePop(); });
   chartEl.addEventListener('click', probe);
+  histEl.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') probeHist(e); });
+  histEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hidePop(); });
+  histEl.addEventListener('click', probeHist);
 
   // ---- Words ------------------------------------------------------------------
   function poolDate() {
@@ -565,6 +701,9 @@ const DATA = /*LAB_DATA*/null;
         (pool ? ' About <b>' + nf.format(Math.round(ahead(st.score))) + '</b> of ' + nf.format(pool.total) +
           ' candidates in the pool are ahead of you.' : '');
     }
+    document.getElementById('histSub').innerHTML = st.score == null
+      ? 'Candidates in the pool at each snapshot IRCC published. Type your score to see how many were ahead of you.'
+      : 'Candidates in the pool at each snapshot IRCC published, and how many of them scored above <b>' + st.score + '</b>.';
     const latest = programs.filter(p => st.on.has(p.slug) && p.inRange).map(p => {
       const l = p.pts[p.pts.length - 1];
       return p.label + ' ' + l.s + ' on ' + df.format(l.t);
@@ -618,6 +757,36 @@ const DATA = /*LAB_DATA*/null;
   button('link', 'Show all', quick, () => { st.on = new Set(slugs); apply(); });
   programsEl.appendChild(quick);
 
+  // Invitations per year: every year, whatever the range, for the programs switched on
+  const yearsEl = document.getElementById('years');
+  const yearRows = [];
+  for (let y = new Date(tMin).getUTCFullYear(), end = new Date(tMax).getUTCFullYear(); y <= end; y++) {
+    const label = document.createElement('span'), track = document.createElement('span'), num = document.createElement('b');
+    label.className = 'y';
+    label.textContent = y === end ? y + ' so far' : y;
+    const bar = track.appendChild(document.createElement('i'));
+    yearsEl.append(label, track, num);
+    yearRows.push({ y: y, bar: bar, num: num });
+  }
+  function years() {
+    const sums = {};
+    let most = 0, picked = 0;
+    for (const p of programs) {
+      if (!st.on.has(p.slug)) continue;
+      picked++;
+      for (const pt of p.pts) { const y = new Date(pt.t).getUTCFullYear(); sums[y] = (sums[y] || 0) + pt.n; }
+    }
+    for (const r of yearRows) most = Math.max(most, sums[r.y] || 0);
+    for (const r of yearRows) {
+      const n = sums[r.y] || 0;
+      r.bar.style.width = (most ? n / most * 100 : 0) + '%';
+      r.num.textContent = nf.format(n);
+    }
+    document.getElementById('yearsSub').textContent = picked === programs.length
+      ? 'Invitations issued across all programs.'
+      : 'Invitations issued in the ' + picked + ' of ' + programs.length + ' programs switched on above.';
+  }
+
   input.value = st.score != null ? st.score : '';
   input.addEventListener('input', () => {
     const digits = input.value.replace(/[^0-9]/g, '');
@@ -647,6 +816,7 @@ const DATA = /*LAB_DATA*/null;
     for (const row of famRows) row.el.hidden = !row.members.some(p => p.inRange);
     writeUrl();
     words();
+    years();
     go(animate !== false);
   }
 
