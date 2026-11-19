@@ -171,6 +171,16 @@
   .info a { color: inherit; }
   @media (prefers-reduced-motion: reduce) { .years i { transition: none; } }
 
+  /* Wide screens: what sat in one left-hand column below the chart splits in two,
+     so the right half of the page carries something too. */
+  @media (min-width: 960px) {
+    .controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 40px; align-items: start; }
+    .controls .you-row { grid-row: 1 / span 2; }
+    .yearsBlock { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: 24px; }
+    .yearsBlock > :not(.years) { grid-column: 1; }
+    .yearsBlock .years { grid-column: 2; grid-row: 1 / span 3; align-content: start; max-width: 760px; }
+  }
+
   footer { padding: 20px 16px 32px; color: var(--muted); font-size: 12px; }
   /* Kept quiet: the page already follows the reader's system, so few will need it. */
   .theme {
@@ -218,7 +228,7 @@
         <div class="pop" id="histPop" hidden></div>
       </div>
     </div>
-    <div>
+    <div class="yearsBlock">
       <h2>Invitations per year</h2>
       <p class="sub" id="yearsSub"></p>
       <details class="info" id="leftInfo">
