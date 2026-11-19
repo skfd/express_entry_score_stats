@@ -140,7 +140,11 @@
   .hist .band { fill: var(--ink); stroke: var(--page); stroke-width: 1; stroke-linejoin: round; }
   .hist .you-case { fill: none; stroke: var(--page); stroke-width: 6; stroke-linejoin: round; }
   .hist .you-line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
-  .pop .rows { display: grid; grid-template-columns: auto auto; gap: 0 14px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .hist .at-case { stroke: var(--page); stroke-width: 4.5; }
+  .hist .at-line { stroke: var(--ink); stroke-width: 1.5; }
+  #histPop { max-width: 300px; }
+  .pop .rows { display: flex; gap: 0 22px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .pop .rows div { display: grid; grid-template-columns: auto auto; gap: 0 14px; align-content: start; }
   .pop .rows span:nth-child(even) { text-align: right; }
   .pop .rows .me { font-weight: 800; }
   .years {
@@ -348,6 +352,9 @@ const DATA = /*PAGE_DATA*/null;
   const hYou = el('g', {}, hClip);
   const hYouCase = el('path', { class: 'you-case' }, hYou);
   const hYouLine = el('path', { class: 'you-line' }, hYou);
+  // The snapshot under the pointer
+  const hAt = el('g', { style: 'display:none' }, hClip);
+  const hAtLines = [el('line', { class: 'at-case' }, hAt), el('line', { class: 'at-line' }, hAt)];
   histSvg.appendChild(hGrid); // axis numbers over the filled areas, not under them
   const hEnds = el('g', { class: 'ends', style: '--c: var(--muted)' }, histSvg);
   const hRing = el('circle', { class: 'ring', r: 0 }, histSvg);
@@ -675,7 +682,7 @@ const DATA = /*PAGE_DATA*/null;
   // ---- Popup: tap or hover a round or a pool bar ------------------------------
   function hidePop() {
     pop.hidden = true; ring.setAttribute('r', 0);
-    histPop.hidden = true; hRing.setAttribute('r', 0);
+    histPop.hidden = true; hRing.setAttribute('r', 0); hAt.style.display = 'none';
   }
 
   function showPop(html, x, yTop, yBottom, box) {
@@ -700,16 +707,44 @@ const DATA = /*PAGE_DATA*/null;
     const from = shownFrom();
     const x = X(best.t), y = histY(shownSum(best, from));
     let html = '<div class="pk">' + df.format(best.t) + '</div><div class="big">' + nf.format(best.total) +
-      '</div><div>candidates in the pool</div><div class="rows">';
-    for (let i = pool.bins.length - 1; i >= from; i--) {
+      '</div><div>candidates in the pool</div><div class="rows"><div>';
+    // A long list of score ranges goes in two columns, so the popup stays short
+    const rows = pool.bins.length - from, perCol = rows > 8 ? Math.ceil(rows / 2) : rows;
+    for (let i = pool.bins.length - 1, k = 0; i >= from; i--, k++) {
       const mine = st.score != null && i === from ? ' class="me"' : '';
+      if (k === perCol) html += '</div><div>';
       html += '<span' + mine + '>' + pool.bins[i].lo + '&ndash;' + pool.bins[i].hi + (mine ? ' (you)' : '') + '</span>' +
         '<span' + mine + '>' + nf.format(best.n[i]) + '</span>';
     }
-    html += '</div>';
+    html += '</div></div>';
     if (st.score != null) html += '<div class="vs">' + nf.format(Math.round(aheadIn(best.n, st.score))) + ' ahead of your ' + st.score + '</div>';
-    showPop(html, x, y - 8, y + 8, histPop);
+    hidePop();
+    histPop.innerHTML = html;
+    histPop.hidden = false;
+    const w = histPop.offsetWidth, h = histPop.offsetHeight;
+    histPop.style.left = clamp(x - w / 2, 6, L.W - w - 6) + 'px';
+    histPop.style.top = histPopTop(h, y) + 'px';
+    for (const ln of hAtLines) {
+      ln.setAttribute('x1', x.toFixed(1)); ln.setAttribute('x2', x.toFixed(1));
+      ln.setAttribute('y1', 14); ln.setAttribute('y2', HIST_H - 22);
+    }
+    hAt.style.display = '';
     hRing.setAttribute('cx', x.toFixed(1)); hRing.setAttribute('cy', y.toFixed(1)); hRing.setAttribute('r', 5);
+  }
+
+  /**
+   * The pool popup hangs half over the chart's bottom edge, the same place for
+   * every snapshot, so it does not jump about as the pointer moves. Where that
+   * would hide the top of the stack it describes (the ring at y), it sits above
+   * the chart instead, unless that would push it off the top of the window.
+   * Once it has moved up it stays up until the pointer leaves, so it changes
+   * sides at most once on the way across.
+   */
+  let histAbove = false;
+  function histPopTop(h, y) {
+    const straddle = HIST_H - h / 2, above = -h - 6;
+    if (straddle < y + 12) histAbove = true;
+    return histAbove && histEl.getBoundingClientRect().top + above >= 0 ? above : straddle;
   }
 
   function nearest(px, py) {
@@ -759,8 +794,8 @@ const DATA = /*PAGE_DATA*/null;
   chartEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hidePop(); });
   chartEl.addEventListener('click', probe);
   histEl.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') probeHist(e); });
-  histEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hidePop(); });
-  histEl.addEventListener('click', probeHist);
+  histEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { histAbove = false; hidePop(); } });
+  histEl.addEventListener('click', e => { histAbove = false; probeHist(e); });
 
   // ---- Words ------------------------------------------------------------------
   function poolDate() {
