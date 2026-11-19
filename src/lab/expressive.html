@@ -202,7 +202,7 @@
         <summary>How the hollow bars are estimated</summary>
         <p>Nobody publishes how many temporary residents left Canada without permanent residence, so this is worked out from two sources.</p>
         <p>Statistics Canada estimates how many people stopped being non-permanent residents each quarter (<a href="https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710004001">table 17-10-0040-01</a>, &ldquo;outflows&rdquo;). That figure includes people who stayed and became permanent residents, so <a href="https://open.canada.ca/data/en/dataset/1b026aab-edb3-4d5d-8231-270a09ed4e82">IRCC&rsquo;s counts</a> of new permanent residents who had held a study or work permit are taken off.</p>
-        <p>What is left is rough. It still includes asylum claimants who became permanent residents and people who lost status without leaving. IRCC&rsquo;s figures are rounded and one person can appear under two kinds of permit. Statistics Canada revises its outflows, sometimes by a lot, and the latest year most of all.</p>
+        <p>What is left is rough, and probably too high. It still includes asylum claimants who became permanent residents and people who lost status without leaving, and IRCC leaves out any count under five. Statistics Canada also revises its outflows, sometimes by a lot, and the latest year most of all. That is why the figures are rounded to the nearest 10,000.</p>
         <p>It covers every temporary resident in Canada, not Express Entry candidates, and it does not change with the programs switched on. It starts in 2022. <span id="leftAsOf"></span></p>
       </details>
       <div class="years" id="years"></div>
@@ -820,7 +820,8 @@ const DATA = /*LAB_DATA*/null;
   const yearRows = [];
   const left = {};
   ((DATA.leftWithoutPr || {}).years || []).forEach(r => { left[r.year] = r; });
-  const approx = n => '\u2248' + nf.format(Math.round(n / 1000) * 1000);
+  // To the nearest 10,000: the sources do not support finer than that
+  const approx = n => '\u2248' + nf.format(Math.round(n / 10000) * 10000);
   for (let y = new Date(tMin).getUTCFullYear(), end = new Date(tMax).getUTCFullYear(); y <= end; y++) {
     const label = document.createElement('span'), track = document.createElement('span'), nums = document.createElement('span');
     label.className = 'y';
@@ -906,6 +907,9 @@ const DATA = /*LAB_DATA*/null;
     '<a href="https://open.canada.ca/en/open-government-licence-canada">Open Government Licence &ndash; Canada</a>. ' +
     'Data: <a href="' + esc(DATA.source) + '">IRCC Express Entry rounds</a>, ' + DATA.roundCount + ' rounds, fetched ' +
     df.format(Date.parse(DATA.fetchedAt)) + '. ' +
+    ((DATA.leftWithoutPr || {}).years ? 'Adapted from Statistics Canada, Table 17-10-0040-01, Estimates of the components of ' +
+      'international migration, quarterly, retrieved ' + df.format(Date.parse(DATA.leftWithoutPr.retrieved)) +
+      '. This does not constitute an endorsement by Statistics Canada of this product. ' : '') +
     '<a href="../">More experiments</a> &middot; <a href="https://github.com/skfd/express_entry_score_stats">GitHub</a>';
 
   darkQ.addEventListener('change', () => { paint(); apply(false); });

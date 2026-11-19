@@ -1,7 +1,7 @@
 {
   "retrieved": "2026-11-18",
   "what": "Temporary residents who left without permanent residence, estimated per calendar year.",
-  "method": "StatCan non-permanent resident outflows minus IRCC new permanent residents who had held a study permit, an International Mobility Program work permit or a Temporary Foreign Worker Program work permit. A static snapshot: rerun the calculation to refresh.",
+  "method": "StatCan non-permanent resident outflows minus IRCC new permanent residents who had held a study permit, an International Mobility Program work permit or a Temporary Foreign Worker Program work permit. A static snapshot, worked out by left-without-pr.py beside this file; probably too high (see that script).",
   "sources": {
     "outflows": "Statistics Canada, Table 17-10-0040-01, \"Non-permanent residents, outflows\", Canada (https://www150.statcan.gc.ca/n1/tbl/csv/17100040-eng.zip)",
     "becamePr": "IRCC, Transition from Temporary Resident to Permanent Resident Status - Monthly IRCC Updates (https://open.canada.ca/data/en/dataset/1b026aab-edb3-4d5d-8231-270a09ed4e82)"
