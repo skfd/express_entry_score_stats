@@ -36,7 +36,7 @@ function indexPage(): string {
   <title>Lab - Express Entry CRS cutoffs</title>
   <style>
     :root { color-scheme: light dark; --page: #f9f9f7; --ink: #0b0b0b; --muted: #6f6d68; --faint: #e4e3dc; }
-    @media (prefers-color-scheme: dark) { :root { --page: #0d0d0d; --ink: #f0efec; --muted: #98968f; --faint: #2a2a28; } }
+    @media (prefers-color-scheme: dark) { :root { --page: #252524; --ink: #dcdad4; --muted: #a19f98; --faint: #3d3d3b; } }
     body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
     main { max-width: 640px; margin: 0 auto; padding: 32px 20px; }
     h1 { font-size: 44px; line-height: 1; letter-spacing: -0.03em; margin: 0 0 8px; }
