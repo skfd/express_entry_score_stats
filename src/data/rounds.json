@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-11-24T06:09:25.109Z",
+  "fetchedAt": "2026-11-26T06:09:42.409Z",
   "source": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds.html",
   "rounds": [
     {
@@ -7670,6 +7670,32 @@
       "roundType": "Provincial Nominee Program",
       "invitationsIssued": 1999,
       "crsScore": 673,
+      "distribution": {
+        "range601_1200": 2068,
+        "range501_600": 43754,
+        "range491_500": 11199,
+        "range481_490": 12464,
+        "range471_480": 15296,
+        "range461_470": 14435,
+        "range451_460": 13416,
+        "range441_450": 12147,
+        "range431_440": 11716,
+        "range421_430": 10611,
+        "range411_420": 10522,
+        "range401_410": 11265,
+        "range351_400": 45934,
+        "range301_350": 16627,
+        "range0_300": 7238,
+        "total": 238692,
+        "asOfDate": "November 22, 2026"
+      }
+    },
+    {
+      "number": 455,
+      "date": "2026-11-25",
+      "roundType": "French-Language proficiency 2026-Version 2",
+      "invitationsIssued": 6000,
+      "crsScore": 401,
       "distribution": {
         "range601_1200": 2068,
         "range501_600": 43754,
